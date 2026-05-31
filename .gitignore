@@ -7,3 +7,8 @@ venv/
 # IDE files
 .vscode/
 .idea/
+
+# Python 캐시
+__pycache__/
+*.pyc
+*.pyo
