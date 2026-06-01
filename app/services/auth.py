@@ -31,6 +31,18 @@ def create_refresh_token(user_id: str) -> str:
     return jwt.encode({"sub": user_id, "type": "refresh", "exp": expire}, settings.SECRET_KEY, algorithm=ALGORITHM)
 
 
+def verify_access_token(access_token: str) -> str:
+    try:
+        payload = jwt.decode(access_token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+    except Exception:
+        raise InvalidTokenError()
+
+    if payload.get("type") != "access":
+        raise InvalidTokenError()
+
+    return payload["sub"]
+
+
 def refresh_tokens(refresh_token: str) -> tuple[str, str]:
     try:
         payload = jwt.decode(refresh_token, settings.SECRET_KEY, algorithms=[ALGORITHM])

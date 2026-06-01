@@ -23,6 +23,14 @@ class ApplicationStatusEnum(str, enum.Enum):
     COMPLETED = "COMPLETED"
 
 
+class StageEnum(str, enum.Enum):
+    DOCUMENT = "서류전형"
+    CODING_TEST = "코딩테스트"
+    FIRST_INTERVIEW = "1차면접"
+    SECOND_INTERVIEW = "2차면접"
+    FINAL_INTERVIEW = "최종면접"
+
+
 class Application(Base):
     __tablename__ = "application"
 
@@ -30,7 +38,7 @@ class Application(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("user.user_id"), nullable=False)
     company_name: Mapped[str] = mapped_column(String, nullable=False)
     position: Mapped[str] = mapped_column(String, nullable=False)
-    stage: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    stage: Mapped[Optional[StageEnum]] = mapped_column(SAEnum(StageEnum), nullable=True)
     date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     level: Mapped[Optional[LevelEnum]] = mapped_column(SAEnum(LevelEnum), nullable=True)
     memo: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
