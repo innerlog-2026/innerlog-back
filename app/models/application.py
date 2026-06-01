@@ -58,6 +58,7 @@ class Question(Base):
     question_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     application_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("application.application_id"), nullable=False)
     question: Mapped[str] = mapped_column(Text, nullable=False)
+    category: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     sequence: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     application: Mapped["Application"] = relationship("Application", back_populates="questions")

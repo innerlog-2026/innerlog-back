@@ -10,7 +10,7 @@ create_application_docs = dict(
             "model": ErrorResponse,
             "content": {
                 "application/json": {
-                    "example": {"code": "INVALID_TOKEN", "message": "유효하지 않은 토큰입니다."}
+                    "example": {"code": "TOKEN_401", "message": "유효하지 않은 토큰입니다."}
                 }
             },
         },

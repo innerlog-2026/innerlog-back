@@ -10,7 +10,7 @@ signup_docs = dict(
             "model": ErrorResponse,
             "content": {
                 "application/json": {
-                    "example": {"code": "EMAIL_ALREADY_EXISTS", "message": "이미 사용 중인 이메일입니다."}
+                    "example": {"code": "COMMON_409", "message": "이미 사용 중인 이메일입니다."}
                 }
             },
         },
@@ -27,7 +27,7 @@ login_docs = dict(
             "model": ErrorResponse,
             "content": {
                 "application/json": {
-                    "example": {"code": "INVALID_CREDENTIALS", "message": "이메일 또는 비밀번호가 올바르지 않습니다."}
+                    "example": {"code": "AUTH_401", "message": "이메일 또는 비밀번호가 올바르지 않습니다."}
                 }
             },
         },
@@ -47,11 +47,11 @@ refresh_docs = dict(
                     "examples": {
                         "invalid_token": {
                             "summary": "유효하지 않은 토큰",
-                            "value": {"code": "INVALID_TOKEN", "message": "유효하지 않은 토큰입니다."},
+                            "value": {"code": "TOKEN_401", "message": "유효하지 않은 토큰입니다."},
                         },
                         "wrong_type": {
                             "summary": "토큰 타입 오류",
-                            "value": {"code": "INVALID_TOKEN_TYPE", "message": "리프레시 토큰이 아닙니다."},
+                            "value": {"code": "TOKEN_TYPE_401", "message": "리프레시 토큰이 아닙니다."},
                         },
                     }
                 }

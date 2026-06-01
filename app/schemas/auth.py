@@ -25,5 +25,5 @@ class RefreshRequest(BaseModel):
 
 
 class ErrorResponse(BaseModel):
-    code: str = Field(..., description="에러 코드", examples=["EMAIL_ALREADY_EXISTS"])
+    code: str = Field(..., description="에러 코드", examples=["COMMON_409"])
     message: str = Field(..., description="에러 메시지", examples=["이미 사용 중인 이메일입니다."])
