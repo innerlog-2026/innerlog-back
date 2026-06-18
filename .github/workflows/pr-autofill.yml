@@ -1,0 +1,73 @@
+name: PR 본문 자동 작성 (Claude)
+
+# PR이 "처음 열릴 때"만 실행한다.
+# - synchronize(매 push)까지 넣으면 작성자가 직접 다듬은 본문을 푸시할 때마다
+#   덮어쓸 수 있으므로, 기본은 opened 한 번으로 한정한다.
+# - reopened까지 받고 싶으면 [opened, reopened] 로 변경.
+on:
+  pull_request:
+    types: [opened]
+
+# 최소 권한 원칙(least privilege):
+# - contents: read       → 코드/diff 읽기
+# - pull-requests: write → PR 본문(body) 수정
+# id-token 등 불필요한 권한은 부여하지 않는다.
+permissions:
+  contents: read
+  pull-requests: write
+
+# 같은 PR에서 워크플로우가 중복 실행되면 뒤엣것만 남기고 취소 → API 비용/러너 시간 절약
+concurrency:
+  group: pr-autofill-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  fill-pr-description:
+    runs-on: ubuntu-latest
+    # 봇이 만든 PR(예: Dependabot)까지 굳이 채울 필요는 없으니 사람 PR로 한정.
+    # 필요 없으면 이 if 줄을 지워도 된다.
+    if: github.event.pull_request.user.type != 'Bot'
+    steps:
+      # fetch-depth: 0 → base...head 전체 diff를 정확히 계산하려면
+      # 얕은 클론(shallow clone)이 아니라 전체 히스토리가 필요하다.
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Claude로 PR 본문 채우기
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # prompt가 주어지면 @claude 멘션 없이 즉시 실행되는 automation 모드로 동작한다.
+          prompt: |
+            너는 이 저장소(InnerLog — FastAPI 기반 AI 백엔드 API 서버)의 코드 리뷰어다.
+            아래 절차로 PR #${{ github.event.pull_request.number }} 의 본문을 작성한다.
+
+            [절차]
+            1. `gh pr diff ${{ github.event.pull_request.number }}` 로 변경된 코드를 확인한다.
+            2. `gh pr view ${{ github.event.pull_request.number }} --json body` 로 기존 본문을 확인한다.
+               - 작성자가 이미 의미 있는 설명을 적어두었다면 지우지 말고 보존/보강한다.
+               - 비어 있거나 템플릿만 있으면 새로 작성한다.
+            3. 아래 형식에 맞춰 한국어로 본문을 작성한 뒤,
+               `gh pr edit ${{ github.event.pull_request.number }} --body "<작성한 내용>"`
+               으로 PR 본문을 업데이트한다.
+
+            [작성 형식]
+            ## 개요
+            (이 PR이 왜 필요한지 1~2문장)
+
+            ## 주요 변경사항
+            (파일/모듈 단위로 핵심 변경을 불릿으로. 어떤 동작이 바뀌었는지 중심으로)
+
+            ## 영향받는 API
+            (추가/변경된 엔드포인트가 있으면 `METHOD /path` 형태로. 없으면 "없음")
+
+            ## 테스트 방법
+            (리뷰어가 직접 검증할 수 있는 구체적 절차. 예: 실행 커맨드, 호출 예시)
+
+            [주의]
+            - 코드에 실제로 없는 변경을 지어내지 말 것.
+            - diff 범위 밖의 내용은 추측하지 말 것.
+          # --max-turns: 무한 반복 방지(비용/시간 상한). diff가 크면 6~10 사이로 조정.
+          claude_args: "--max-turns 8"
