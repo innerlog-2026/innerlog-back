@@ -36,6 +36,11 @@ class SpeechPracticeNotAllowedError(InnerLogException):
         super().__init__(403, "SPEECH_403", "현재 전형 단계에서는 스피치 연습을 사용할 수 없습니다.")
 
 
+class SpeechPracticeAlreadyExistsError(InnerLogException):
+    def __init__(self):
+        super().__init__(409, "SPEECH_409", "이미 스피치 연습이 생성된 지원 현황입니다.")
+
+
 class AIServerError(InnerLogException):
     def __init__(self):
         super().__init__(502, "AI_SERVER_ERROR", "AI 서버 호출에 실패했습니다.")

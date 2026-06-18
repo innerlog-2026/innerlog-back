@@ -30,3 +30,24 @@ class QuestionItem(BaseModel):
 class SpeechPracticeCreateResponse(BaseModel):
     application_id: uuid.UUID
     questions: list[QuestionItem]
+
+
+class QuestionProgressItem(BaseModel):
+    question_id: uuid.UUID
+    question: str
+    category: Optional[str]
+    sequence: Optional[int]
+    is_practiced: bool = Field(..., description="연습 완료 여부 (제출 이력 존재 여부)")
+
+
+class SpeechPracticeQuestionListResponse(BaseModel):
+    application_id: uuid.UUID
+    total_count: int = Field(..., description="전체 질문 수")
+    practiced_count: int = Field(..., description="연습한 질문 수")
+    questions: list[QuestionProgressItem]
+
+
+class SpeechPracticeQuestionGenerateResponse(BaseModel):
+    application_id: uuid.UUID
+    added_count: int = Field(..., description="이번에 새로 추가된 질문 수 (중복 제외)")
+    questions: list[QuestionItem] = Field(..., description="새로 추가된 질문 목록")
