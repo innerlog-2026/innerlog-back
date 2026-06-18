@@ -2,7 +2,10 @@ from app.api.docs.responses import error_response
 from app.core.exceptions import (
     AIServerError,
     ApplicationNotFoundError,
+    AudioFileTooLargeError,
+    InvalidAudioFileError,
     InvalidTokenError,
+    QuestionNotFoundError,
     SpeechPracticeAlreadyExistsError,
     SpeechPracticeNotAllowedError,
 )
@@ -16,6 +19,9 @@ _ai_server_error_response = error_response("AI 서버 호출 실패", AIServerEr
 _speech_already_exists_response = error_response(
     "이미 스피치 연습이 생성됨", SpeechPracticeAlreadyExistsError
 )
+_question_not_found_response = error_response("질문 없음", QuestionNotFoundError)
+_invalid_audio_response = error_response("잘못된 음성 파일 형식", InvalidAudioFileError)
+_audio_too_large_response = error_response("음성 파일 용량 초과", AudioFileTooLargeError)
 
 list_speech_practice_questions_docs = dict(
     summary="면접 예상 질문 리스트 조회",
@@ -51,6 +57,23 @@ create_speech_practice_docs = dict(
         403: _speech_not_allowed_response,
         404: _application_not_found_response,
         409: _speech_already_exists_response,
+        502: _ai_server_error_response,
+    },
+)
+
+analyze_speech_docs = dict(
+    summary="스피치 분석 (음성 파일 업로드 → AI 분석)",
+    description=(
+        "질문에 대한 답변 음성 파일(mp3/wav, 최대 100MB)을 multipart/form-data로 업로드하면 "
+        "공유 볼륨에 저장한 뒤 AI 서버에 스피치 분석을 요청하고, 분석 결과를 반환합니다. "
+        "제출 및 분석 결과는 DB에 저장되어 재조회할 수 있습니다."
+    ),
+    responses={
+        201: {"description": "스피치 분석 성공"},
+        400: _invalid_audio_response,
+        401: _unauthorized_response,
+        404: _question_not_found_response,
+        413: _audio_too_large_response,
         502: _ai_server_error_response,
     },
 )

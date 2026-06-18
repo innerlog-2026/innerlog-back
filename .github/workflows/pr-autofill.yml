@@ -1,4 +1,4 @@
-name: PR 본문 자동 작성 (Claude)
+name: PR Autofill
 
 # PR이 "처음 열릴 때"만 실행한다.
 # - synchronize(매 push)까지 넣으면 작성자가 직접 다듬은 본문을 푸시할 때마다
@@ -11,12 +11,12 @@ on:
 # 최소 권한 원칙(least privilege):
 # - contents: read       → 코드/diff 읽기
 # - pull-requests: write → PR 본문(body) 수정
-# id-token 등 불필요한 권한은 부여하지 않는다.
+# - id-token: write      → claude-code-action이 OIDC로 GitHub 토큰을 교환할 때 필요
 permissions:
   contents: read
   pull-requests: write
+  id-token: write
 
-# 같은 PR에서 워크플로우가 중복 실행되면 뒤엣것만 남기고 취소 → API 비용/러너 시간 절약
 concurrency:
   group: pr-autofill-${{ github.event.pull_request.number }}
   cancel-in-progress: true
