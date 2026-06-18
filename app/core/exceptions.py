@@ -31,6 +31,21 @@ class ApplicationNotFoundError(InnerLogException):
         super().__init__(404, "APPLICATION_404", "지원 현황을 찾을 수 없습니다.")
 
 
+class QuestionNotFoundError(InnerLogException):
+    def __init__(self):
+        super().__init__(404, "QUESTION_404", "질문을 찾을 수 없습니다.")
+
+
+class InvalidAudioFileError(InnerLogException):
+    def __init__(self):
+        super().__init__(400, "SPEECH_FILE_400", "지원하지 않는 음성 파일 형식입니다. (mp3, wav만 허용됩니다.)")
+
+
+class AudioFileTooLargeError(InnerLogException):
+    def __init__(self):
+        super().__init__(413, "SPEECH_FILE_413", "음성 파일 용량이 너무 큽니다. (최대 100MB)")
+
+
 class SpeechPracticeNotAllowedError(InnerLogException):
     def __init__(self):
         super().__init__(403, "SPEECH_403", "현재 전형 단계에서는 스피치 연습을 사용할 수 없습니다.")

@@ -1,19 +1,22 @@
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.api.docs.speech import (
+    analyze_speech_docs,
     create_speech_practice_docs,
     generate_speech_practice_questions_docs,
     list_speech_practice_questions_docs,
 )
 from app.core.database import get_db
+from app.models.submission import InputTypeEnum
 from app.models.user import User
 from app.schemas.speech import (
     QuestionItem,
     QuestionProgressItem,
+    SpeechAnalysisResponse,
     SpeechPracticeCreateReq,
     SpeechPracticeCreateResponse,
     SpeechPracticeQuestionGenerateResponse,
@@ -82,4 +85,29 @@ def generate_speech_practice_questions(
         application_id=application_id,
         added_count=len(added),
         questions=[QuestionItem.model_validate(question) for question in added],
+    )
+
+
+@router.post(
+    "/questions/{question_id}/submissions",
+    response_model=SpeechAnalysisResponse,
+    status_code=201,
+    **analyze_speech_docs,
+)
+def analyze_speech_submission(
+    question_id: uuid.UUID,
+    file: UploadFile = File(..., description="답변 음성 파일 (mp3/wav, 최대 100MB)"),
+    input_type: InputTypeEnum = Form(InputTypeEnum.UPLOAD, description="입력 방식 (RECORDING: 녹음 / UPLOAD: 파일 업로드)"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    submission, result = speech_service.analyze_speech(
+        db, current_user.user_id, question_id, file, input_type
+    )
+    return SpeechAnalysisResponse(
+        submission_id=submission.submission_id,
+        question_id=question_id,
+        acoustic=result.get("acoustic") or {},
+        content=result.get("content") or {},
+        feedback=result.get("feedback") or {},
     )
