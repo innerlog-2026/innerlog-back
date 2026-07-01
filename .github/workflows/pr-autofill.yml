@@ -1,21 +1,16 @@
 name: PR Autofill
 
-# PR이 "처음 열릴 때"만 실행한다.
-# - synchronize(매 push)까지 넣으면 작성자가 직접 다듬은 본문을 푸시할 때마다
-#   덮어쓸 수 있으므로, 기본은 opened 한 번으로 한정한다.
-# - reopened까지 받고 싶으면 [opened, reopened] 로 변경.
+# PR이 "처음 열릴 때"만 실행. 매 push까지 채우고 싶으면 [opened, synchronize] 로.
 on:
   pull_request:
     types: [opened]
 
-# 최소 권한 원칙(least privilege):
-# - contents: read       → 코드/diff 읽기
-# - pull-requests: write → PR 본문(body) 수정
-# - id-token: write      → claude-code-action이 OIDC로 GitHub 토큰을 교환할 때 필요
+# 최소 권한:
+# - contents: read       → 코드 읽기
+# - pull-requests: write → PR 본문(body) 수정 (2단계 gh pr edit 에 필요)
 permissions:
   contents: read
   pull-requests: write
-  id-token: write
 
 concurrency:
   group: pr-autofill-${{ github.event.pull_request.number }}
@@ -24,50 +19,64 @@ concurrency:
 jobs:
   fill-pr-description:
     runs-on: ubuntu-latest
-    # 봇이 만든 PR(예: Dependabot)까지 굳이 채울 필요는 없으니 사람 PR로 한정.
-    # 필요 없으면 이 if 줄을 지워도 된다.
+    # 봇 PR(Dependabot 등)은 제외. 필요 없으면 이 줄 삭제.
     if: github.event.pull_request.user.type != 'Bot'
     steps:
-      # fetch-depth: 0 → base...head 전체 diff를 정확히 계산하려면
-      # 얕은 클론(shallow clone)이 아니라 전체 히스토리가 필요하다.
+      # 저장소를 받아둬야 Claude가 CLAUDE.md·주변 코드를 참고해 더 정확히 쓸 수 있다.
       - name: 저장소 체크아웃
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Claude로 PR 본문 채우기
+      # [1단계] diff 추출 — 결정적 스텝.
+      # 러너에 기본 설치된 gh를 GH_TOKEN 으로 인증해 PR diff를 파일로 저장한다.
+      # (액션 내부 셸의 gh 인증에 의존하지 않는 것이 이 워크플로우의 핵심)
+      - name: PR diff 추출
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr diff ${{ github.event.pull_request.number }} > pr.diff
+          echo "diff 라인 수: $(wc -l < pr.diff)"
+
+      # [2단계] Claude는 "본문 텍스트 파일"만 만든다. PR을 직접 건드리지 않는다.
+      # → Read/Write 같은 가장 안정적인 동작만 시키므로 무음 실패 위험이 없다.
+      - name: Claude로 PR 본문 초안 생성
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          # prompt가 주어지면 @claude 멘션 없이 즉시 실행되는 automation 모드로 동작한다.
           prompt: |
-            너는 이 저장소(InnerLog — FastAPI 기반 AI 백엔드 API 서버)의 코드 리뷰어다.
-            아래 절차로 PR #${{ github.event.pull_request.number }} 의 본문을 작성한다.
-
-            [절차]
-            1. `gh pr diff ${{ github.event.pull_request.number }}` 로 변경된 코드를 확인한다.
-            2. `gh pr view ${{ github.event.pull_request.number }} --json body` 로 기존 본문을 확인한다.
-               - 작성자가 이미 의미 있는 설명을 적어두었다면 지우지 말고 보존/보강한다.
-               - 비어 있거나 템플릿만 있으면 새로 작성한다.
-            3. 아래 형식에 맞춰 한국어로 본문을 작성한 뒤,
-               `gh pr edit ${{ github.event.pull_request.number }} --body "<작성한 내용>"`
-               으로 PR 본문을 업데이트한다.
+            저장소 루트의 `pr.diff` 파일을 읽어 변경 내용을 분석하고,
+            InnerLog(FastAPI 기반 AI 백엔드) PR 본문을 한국어로 작성한 뒤
+            저장소 루트에 `pr-body.md` 파일로 저장해라.
+            PR이나 코멘트를 직접 수정하지는 말 것 — 오직 pr-body.md 파일만 생성한다.
 
             [작성 형식]
             ## 개요
             (이 PR이 왜 필요한지 1~2문장)
 
             ## 주요 변경사항
-            (파일/모듈 단위로 핵심 변경을 불릿으로. 어떤 동작이 바뀌었는지 중심으로)
+            (파일/모듈 단위 핵심 변경을 불릿으로)
 
             ## 영향받는 API
-            (추가/변경된 엔드포인트가 있으면 `METHOD /path` 형태로. 없으면 "없음")
+            (추가/변경된 엔드포인트를 `METHOD /path` 형태로. 없으면 "없음")
 
             ## 테스트 방법
-            (리뷰어가 직접 검증할 수 있는 구체적 절차. 예: 실행 커맨드, 호출 예시)
+            (리뷰어가 직접 검증할 수 있는 구체적 절차)
 
-            [주의]
-            - 코드에 실제로 없는 변경을 지어내지 말 것.
-            - diff 범위 밖의 내용은 추측하지 말 것.
-          # --max-turns: 무한 반복 방지(비용/시간 상한). diff가 크면 6~10 사이로 조정.
-          claude_args: "--max-turns 8"
+            ## 리뷰 포인트
+            (비동기 처리, 에러 핸들링, AI 서버 연동 등 특히 주의 깊게 볼 부분)
+
+            [주의] diff에 실제로 없는 변경을 지어내지 말 것.
+          # 파일 읽고 쓰는 작업이므로 max-turns 는 넉넉히.
+          claude_args: "--max-turns 15"
+
+      # [3단계] 실제 PR 본문 반영 — 결정적 스텝.
+      # Claude가 파일을 못 만들면 여기서 "명시적으로" 실패시켜, 무음 성공을 방지한다.
+      - name: PR 본문 업데이트
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ ! -s pr-body.md ]; then
+            echo "::error::pr-body.md 가 생성되지 않았습니다. 1~2단계 로그를 확인하세요."
+            exit 1
+          fi
+          gh pr edit ${{ github.event.pull_request.number }} --body-file pr-body.md
+          echo "PR #${{ github.event.pull_request.number }} 본문을 업데이트했습니다."
