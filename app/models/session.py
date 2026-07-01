@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import String, Integer, Text, ForeignKey, Enum as SAEnum, func
-from sqlalchemy.dialects.postgresql import UUID, ARRAY
+from sqlalchemy.dialects.postgresql import UUID, ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -42,6 +42,8 @@ class Session(Base):
     stage: Mapped[SessionStageEnum] = mapped_column(SAEnum(SessionStageEnum), default=SessionStageEnum.FACT, nullable=False)
     status: Mapped[SessionStatusEnum] = mapped_column(SAEnum(SessionStatusEnum), default=SessionStatusEnum.IN_PROGRESS, nullable=False)
     type: Mapped[SessionTypeEnum] = mapped_column(SAEnum(SessionTypeEnum), nullable=False)
+    # AI 서버 /chat에 매 턴 그대로 넘길 state 전체 blob. 백엔드는 해석하지 않고 저장 → 재전달만 한다.
+    ai_state: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     started_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
     ended_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
 

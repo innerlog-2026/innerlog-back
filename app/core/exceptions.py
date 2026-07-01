@@ -56,6 +56,44 @@ class SpeechPracticeAlreadyExistsError(InnerLogException):
         super().__init__(409, "SPEECH_409", "이미 스피치 연습이 생성된 지원 현황입니다.")
 
 
+class RetrospectNotAllowedError(InnerLogException):
+    def __init__(self):
+        super().__init__(403, "RETROSPECT_403", "현재 전형 단계에서는 면접 회고를 사용할 수 없습니다.")
+
+
+class RetrospectAlreadyExistsError(InnerLogException):
+    def __init__(self):
+        super().__init__(409, "RETROSPECT_409", "이미 해당 면접 단계의 회고가 존재합니다.")
+
+
+class SessionNotFoundError(InnerLogException):
+    def __init__(self):
+        super().__init__(404, "SESSION_404", "회고 세션을 찾을 수 없습니다.")
+
+
+class RetrospectNotInProgressError(InnerLogException):
+    def __init__(self):
+        super().__init__(409, "RETROSPECT_PROGRESS_409", "이미 종료된 회고 세션입니다.")
+
+
+class RetrospectNotDoneError(InnerLogException):
+    def __init__(self):
+        super().__init__(
+            409,
+            "RETROSPECT_DONE_409",
+            "아직 회고가 완료되지 않았습니다. (대화가 DONE 단계에 도달해야 분석할 수 있습니다.)",
+        )
+
+
+class RetrospectAlreadyDoneError(InnerLogException):
+    def __init__(self):
+        super().__init__(
+            409,
+            "RETROSPECT_ALREADY_DONE_409",
+            "회고 대화가 이미 종료되었습니다. 분석 결과를 요청해주세요.",
+        )
+
+
 class AIServerError(InnerLogException):
     def __init__(self):
         super().__init__(502, "AI_SERVER_ERROR", "AI 서버 호출에 실패했습니다.")
