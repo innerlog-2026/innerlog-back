@@ -1,8 +1,9 @@
 # 가상환경
 venv/
 
-# 환경변수
+# 환경변수 (.env.backend / .env.ai 등 배포 시크릿 포함)
 .env
+.env.*
 
 # IDE files
 .vscode/
