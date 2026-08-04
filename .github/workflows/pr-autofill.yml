@@ -8,9 +8,11 @@ on:
 # 최소 권한:
 # - contents: read       → 코드 읽기
 # - pull-requests: write → PR 본문(body) 수정 (2단계 gh pr edit 에 필요)
+# - id-token: write      → claude-code-action@v1 이 OIDC 토큰 교환으로 인증 (없으면 실패)
 permissions:
   contents: read
   pull-requests: write
+  id-token: write
 
 concurrency:
   group: pr-autofill-${{ github.event.pull_request.number }}
