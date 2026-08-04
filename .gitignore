@@ -1,0 +1,21 @@
+# 가상환경
+venv/
+
+# 환경변수 (.env.backend / .env.ai 등 배포 시크릿 포함)
+.env
+.env.*
+
+# IDE files
+.vscode/
+.idea/
+
+# Python 캐시
+__pycache__/
+*.pyc
+*.pyo
+
+# 최상위 docs 디렉터리만 무시 
+/docs/
+
+# Claude Code 로컬 설정 (개인/머신 한정)
+.claude/settings.local.json

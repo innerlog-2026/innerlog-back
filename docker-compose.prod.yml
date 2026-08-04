@@ -1,0 +1,46 @@
+# EC2 배포용 docker-compose
+# ------------------------------------------------------------------
+# - DB: AWS RDS 사용 → PostgreSQL 컨테이너를 띄우지 않는다 (로컬 개발용은 docker-compose.yml).
+# - 이미지: Docker Hub에서 pull (아래 <DOCKERHUB_USERNAME> 을 본인 계정으로 교체).
+# - 음성 파일: backend가 /uploads/audio 에 저장 → 절대경로를 ai에게 전달 →
+#              ai가 같은 볼륨(audio_data)에서 그대로 읽는다. (S3 미사용, 공유 볼륨 방식)
+#
+# 사용법 (EC2에서):
+#   docker login
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml up -d
+#   docker compose -f docker-compose.prod.yml logs -f
+# ------------------------------------------------------------------
+name: innerlog
+
+services:
+  backend:
+    image: <DOCKERHUB_USERNAME>/innerlog-backend:latest
+    container_name: innerlog-backend
+    env_file:
+      - .env.backend
+    ports:
+      - "8000:8000" # 외부(프론트)에서 접근하는 API 포트
+    volumes:
+      - audio_data:/uploads/audio # AUDIO_UPLOAD_DIR 과 동일 경로여야 함
+    depends_on:
+      - ai
+    # 기동 시 RDS 스키마 마이그레이션을 먼저 적용한 뒤 서버 실행
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    restart: unless-stopped
+
+  ai:
+    image: <DOCKERHUB_USERNAME>/innerlog-ai:latest
+    container_name: innerlog-ai
+    env_file:
+      - .env.ai
+    ports:
+      - "127.0.0.1:8001:8000" # backend는 http://ai:8000 로 호출
+    volumes:
+      - audio_data:/uploads/audio # backend와 같은 볼륨을 같은 경로에 마운트
+      - hf_models:/models
+    restart: unless-stopped
+
+volumes:
+  audio_data: # backend ↔ ai 음성 파일 공유
+  hf_models: # HuggingFace 모델 캐시 (HF_HOME=/models)
