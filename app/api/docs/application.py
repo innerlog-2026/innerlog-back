@@ -1,7 +1,8 @@
 from app.api.docs.responses import error_response
-from app.core.exceptions import InvalidTokenError
+from app.core.exceptions import ApplicationNotFoundError, InvalidTokenError
 
 _unauthorized_response = error_response("인증 실패", InvalidTokenError)
+_not_found_response = error_response("지원 현황 없음", ApplicationNotFoundError)
 
 create_application_docs = dict(
     summary="지원 현황 생성",
@@ -19,5 +20,17 @@ list_applications_docs = dict(
     responses={
         200: {"description": "지원 현황 목록 조회 성공"},
         401: _unauthorized_response,
+    },
+)
+
+update_stage_result_docs = dict(
+    summary="진행 결과 수정",
+    description="지원 현황의 특정 전형 단계 상태(진행중/합격/탈락)를 설정한다. "
+    "(지원, 단계) 단위로 upsert하며 현재 진행 단계 포인터도 함께 갱신한다. "
+    "'대기'는 저장하지 않는다(행이 없으면 대기).",
+    responses={
+        200: {"description": "진행 결과 수정 성공"},
+        401: _unauthorized_response,
+        404: _not_found_response,
     },
 )

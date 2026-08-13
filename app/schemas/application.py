@@ -4,7 +4,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.application import ApplicationStatusEnum, StageEnum
+from app.models.application import ApplicationStatusEnum, StageEnum, StageStatusEnum
 
 
 class ApplicationCreateRequest(BaseModel):
@@ -47,3 +47,19 @@ class ApplicationListResponse(BaseModel):
     total_count: int = Field(..., description="전체 지원 현황 수", examples=[12])
     total_pages: int = Field(..., description="전체 페이지 수", examples=[3])
     has_next: bool = Field(..., description="다음 페이지 존재 여부")
+
+
+class StageResultUpdateRequest(BaseModel):
+    stage: StageEnum = Field(..., description="현재 진행 단계", examples=["1차면접"])
+    status: StageStatusEnum = Field(
+        ..., description="해당 단계 상태 (진행중 / 합격 / 탈락). '대기'는 저장하지 않음", examples=["합격"]
+    )
+
+
+class StageResultResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    application_id: uuid.UUID
+    stage: StageEnum
+    status: StageStatusEnum
+    updated_at: datetime

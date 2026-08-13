@@ -1,8 +1,14 @@
+import uuid
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
-from app.api.docs.application import create_application_docs, list_applications_docs
+from app.api.docs.application import (
+    create_application_docs,
+    list_applications_docs,
+    update_stage_result_docs,
+)
 from app.core.database import get_db
 from app.models.user import User
 from app.schemas.application import (
@@ -10,6 +16,8 @@ from app.schemas.application import (
     ApplicationListItem,
     ApplicationListResponse,
     ApplicationResponse,
+    StageResultResponse,
+    StageResultUpdateRequest,
 )
 from app.services import application as application_service
 from app.services.application import PAGE_SIZE
@@ -42,3 +50,20 @@ def list_applications(
         total_pages=total_pages,
         has_next=page < total_pages,
     )
+
+
+@router.patch(
+    "/{application_id}/stage-result",
+    response_model=StageResultResponse,
+    **update_stage_result_docs,
+)
+def update_stage_result(
+    application_id: uuid.UUID,
+    body: StageResultUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    record = application_service.update_stage_result(
+        db, current_user.user_id, application_id, body.stage, body.status
+    )
+    return StageResultResponse.model_validate(record)
