@@ -4,7 +4,8 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import ApplicationNotFoundError
 from app.models.application import Application, ApplicationStage, StageEnum, StageStatusEnum
-from app.schemas.application import ApplicationCreateRequest
+from app.models.session import Session as SessionModel, SessionStatusEnum, SessionTypeEnum
+from app.schemas.application import ApplicationCreateRequest, TimelineStatusEnum
 
 PAGE_SIZE = 5
 
@@ -85,3 +86,40 @@ def update_stage_result(
     db.commit()
     db.refresh(record)
     return record
+
+
+def get_application_detail(db: Session, user_id: uuid.UUID, application_id: uuid.UUID):
+    # 상세 + 타임라인(고정 파이프라인) + 1·2차 회고 완료 여부
+    application = _get_owned_application(db, user_id, application_id)
+
+    stage_rows = (
+        db.query(ApplicationStage)
+        .filter(ApplicationStage.application_id == application.application_id)
+        .all()
+    )
+    status_by_stage = {row.stage: row.status for row in stage_rows}
+    # 고정 파이프라인 전체를 StageEnum 순서로. 도달하지 않은 단계는 '대기'로 파생(저장은 안 함).
+    timeline = []
+    for stage in StageEnum:
+        stored = status_by_stage.get(stage)
+        timeline.append(
+            (stage, TimelineStatusEnum[stored.name] if stored else TimelineStatusEnum.PENDING)
+        )
+    current_status = status_by_stage.get(application.stage)
+
+    # 회고 세션이 COMPLETED면 해당 면접 회고 '완료'
+    completed_types = {
+        session_type
+        for (session_type,) in (
+            db.query(SessionModel.type)
+            .filter(
+                SessionModel.application_id == application.application_id,
+                SessionModel.status == SessionStatusEnum.COMPLETED,
+            )
+            .all()
+        )
+    }
+    first_done = SessionTypeEnum.FIRST in completed_types
+    second_done = SessionTypeEnum.SECOND in completed_types
+
+    return application, timeline, current_status, first_done, second_done

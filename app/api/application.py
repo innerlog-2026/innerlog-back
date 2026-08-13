@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.api.docs.application import (
     create_application_docs,
+    get_application_detail_docs,
     list_applications_docs,
     update_stage_result_docs,
 )
@@ -13,11 +14,13 @@ from app.core.database import get_db
 from app.models.user import User
 from app.schemas.application import (
     ApplicationCreateRequest,
+    ApplicationDetailResponse,
     ApplicationListItem,
     ApplicationListResponse,
     ApplicationResponse,
     StageResultResponse,
     StageResultUpdateRequest,
+    TimelineStageItem,
 )
 from app.services import application as application_service
 from app.services.application import PAGE_SIZE
@@ -49,6 +52,27 @@ def list_applications(
         total_count=total_count,
         total_pages=total_pages,
         has_next=page < total_pages,
+    )
+
+
+@router.get("/{application_id}", response_model=ApplicationDetailResponse, **get_application_detail_docs)
+def get_application_detail(
+    application_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    application, timeline, current_status, first_done, second_done = (
+        application_service.get_application_detail(db, current_user.user_id, application_id)
+    )
+    return ApplicationDetailResponse(
+        application_id=application.application_id,
+        company_name=application.company_name,
+        position=application.position,
+        current_stage=application.stage,
+        status=current_status,
+        first_interview_retrospect_completed=first_done,
+        second_interview_retrospect_completed=second_done,
+        timeline=[TimelineStageItem(stage=stage, status=status) for stage, status in timeline],
     )
 
 

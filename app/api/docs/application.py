@@ -34,3 +34,16 @@ update_stage_result_docs = dict(
         404: _not_found_response,
     },
 )
+
+get_application_detail_docs = dict(
+    summary="지원 현황 상세 조회",
+    description="지원 현황 상세 + 전형 진행 단계 타임라인을 조회한다. "
+    "타임라인은 고정 파이프라인 전체를 순서대로 반환하며, 각 단계 상태는 대기/진행중/합격/탈락이다 "
+    "(도달하지 않은 단계는 '대기'; 대기는 저장하지 않고 응답에서 파생). "
+    "현재 전형 단계의 상태와 1·2차 면접 회고 완료 여부(회고 세션 COMPLETED)도 포함한다.",
+    responses={
+        200: {"description": "지원 현황 상세 조회 성공"},
+        401: _unauthorized_response,
+        404: _not_found_response,
+    },
+)

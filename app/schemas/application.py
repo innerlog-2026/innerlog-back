@@ -1,3 +1,4 @@
+import enum
 import uuid
 from datetime import date as date_type, datetime
 from typing import Optional
@@ -5,6 +6,14 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.application import ApplicationStatusEnum, StageEnum, StageStatusEnum
+
+
+class TimelineStatusEnum(str, enum.Enum):
+    # 응답 전용: 저장 상태(진행중/합격/탈락) + 파생 상태(대기=미도달 단계)
+    PENDING = "대기"
+    IN_PROGRESS = "진행중"
+    PASS = "합격"
+    FAIL = "탈락"
 
 
 class ApplicationCreateRequest(BaseModel):
@@ -63,3 +72,25 @@ class StageResultResponse(BaseModel):
     stage: StageEnum
     status: StageStatusEnum
     updated_at: datetime
+
+
+class TimelineStageItem(BaseModel):
+    stage: StageEnum = Field(..., description="전형 단계", examples=["1차면접"])
+    status: TimelineStatusEnum = Field(
+        ..., description="단계 상태 (대기 / 진행중 / 합격 / 탈락). 미도달 단계는 대기", examples=["진행중"]
+    )
+
+
+class ApplicationDetailResponse(BaseModel):
+    application_id: uuid.UUID
+    company_name: str = Field(..., description="기업명", examples=["토스뱅크"])
+    position: str = Field(..., description="직무", examples=["프론트엔드 개발자"])
+    current_stage: Optional[StageEnum] = Field(None, description="현재 전형 단계", examples=["1차면접"])
+    status: Optional[StageStatusEnum] = Field(
+        None, description="현재 전형 단계의 상태 (진행중 / 합격 / 탈락). null = 대기", examples=["진행중"]
+    )
+    first_interview_retrospect_completed: bool = Field(..., description="1차 면접 회고 완료 여부")
+    second_interview_retrospect_completed: bool = Field(..., description="2차 면접 회고 완료 여부")
+    timeline: list[TimelineStageItem] = Field(
+        ..., description="전형 진행 단계 타임라인 (고정 파이프라인 전체, 순서대로). 미도달 단계는 대기"
+    )
