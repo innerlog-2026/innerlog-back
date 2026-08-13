@@ -1,0 +1,98 @@
+{
+  "label": "async_optimized",
+  "path": "/speech-practices/{application_id}/questions",
+  "duration_s": 20.0,
+  "levels": [
+    {
+      "concurrency": 5,
+      "duration_s": 21.21,
+      "total_requests": 50,
+      "ok": 50,
+      "fail": 0,
+      "rps": 2.36,
+      "p50_ms": 2106.7,
+      "p95_ms": 2149.7,
+      "p99_ms": 2191.6,
+      "max_ms": 2192.9,
+      "errors": {}
+    },
+    {
+      "concurrency": 10,
+      "duration_s": 21.4,
+      "total_requests": 100,
+      "ok": 100,
+      "fail": 0,
+      "rps": 4.67,
+      "p50_ms": 2121.8,
+      "p95_ms": 2232.7,
+      "p99_ms": 2237.6,
+      "max_ms": 2243.9,
+      "errors": {}
+    },
+    {
+      "concurrency": 15,
+      "duration_s": 21.89,
+      "total_requests": 150,
+      "ok": 150,
+      "fail": 0,
+      "rps": 6.85,
+      "p50_ms": 2129.3,
+      "p95_ms": 2353.6,
+      "p99_ms": 2400.9,
+      "max_ms": 2406.5,
+      "errors": {}
+    },
+    {
+      "concurrency": 20,
+      "duration_s": 22.08,
+      "total_requests": 200,
+      "ok": 200,
+      "fail": 0,
+      "rps": 9.06,
+      "p50_ms": 2126.8,
+      "p95_ms": 2414.6,
+      "p99_ms": 2427.8,
+      "max_ms": 2429.5,
+      "errors": {}
+    },
+    {
+      "concurrency": 30,
+      "duration_s": 22.03,
+      "total_requests": 285,
+      "ok": 285,
+      "fail": 0,
+      "rps": 12.94,
+      "p50_ms": 2115.8,
+      "p95_ms": 2613.8,
+      "p99_ms": 2624.5,
+      "max_ms": 2630.4,
+      "errors": {}
+    },
+    {
+      "concurrency": 50,
+      "duration_s": 21.91,
+      "total_requests": 443,
+      "ok": 443,
+      "fail": 0,
+      "rps": 20.21,
+      "p50_ms": 2198.4,
+      "p95_ms": 3018.7,
+      "p99_ms": 3040.6,
+      "max_ms": 3051.1,
+      "errors": {}
+    },
+    {
+      "concurrency": 100,
+      "duration_s": 22.07,
+      "total_requests": 811,
+      "ok": 811,
+      "fail": 0,
+      "rps": 36.75,
+      "p50_ms": 2332.4,
+      "p95_ms": 4014.4,
+      "p99_ms": 4115.7,
+      "max_ms": 4151.2,
+      "errors": {}
+    }
+  ]
+}
