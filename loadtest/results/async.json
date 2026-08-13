@@ -1,0 +1,98 @@
+{
+  "label": "async",
+  "path": "/speech-practices/{application_id}/questions",
+  "duration_s": 20.0,
+  "levels": [
+    {
+      "concurrency": 5,
+      "duration_s": 21.33,
+      "total_requests": 50,
+      "ok": 50,
+      "fail": 0,
+      "rps": 2.34,
+      "p50_ms": 2105.5,
+      "p95_ms": 2310.7,
+      "p99_ms": 2314.1,
+      "max_ms": 2315.1,
+      "errors": {}
+    },
+    {
+      "concurrency": 10,
+      "duration_s": 21.22,
+      "total_requests": 100,
+      "ok": 100,
+      "fail": 0,
+      "rps": 4.71,
+      "p50_ms": 2083.5,
+      "p95_ms": 2232.1,
+      "p99_ms": 2267.6,
+      "max_ms": 2268.1,
+      "errors": {}
+    },
+    {
+      "concurrency": 15,
+      "duration_s": 21.4,
+      "total_requests": 150,
+      "ok": 150,
+      "fail": 0,
+      "rps": 7.01,
+      "p50_ms": 2081.3,
+      "p95_ms": 2330.3,
+      "p99_ms": 2340.4,
+      "max_ms": 2344.0,
+      "errors": {}
+    },
+    {
+      "concurrency": 20,
+      "duration_s": 22.09,
+      "total_requests": 197,
+      "ok": 197,
+      "fail": 0,
+      "rps": 8.92,
+      "p50_ms": 2095.5,
+      "p95_ms": 2410.2,
+      "p99_ms": 2418.8,
+      "max_ms": 2421.7,
+      "errors": {}
+    },
+    {
+      "concurrency": 30,
+      "duration_s": 21.59,
+      "total_requests": 281,
+      "ok": 281,
+      "fail": 0,
+      "rps": 13.02,
+      "p50_ms": 2134.1,
+      "p95_ms": 2646.7,
+      "p99_ms": 2657.5,
+      "max_ms": 2664.6,
+      "errors": {}
+    },
+    {
+      "concurrency": 50,
+      "duration_s": 21.8,
+      "total_requests": 432,
+      "ok": 432,
+      "fail": 0,
+      "rps": 19.82,
+      "p50_ms": 2392.5,
+      "p95_ms": 3001.4,
+      "p99_ms": 3023.0,
+      "max_ms": 3030.3,
+      "errors": {}
+    },
+    {
+      "concurrency": 100,
+      "duration_s": 22.13,
+      "total_requests": 782,
+      "ok": 782,
+      "fail": 0,
+      "rps": 35.34,
+      "p50_ms": 2513.9,
+      "p95_ms": 3959.3,
+      "p99_ms": 4048.8,
+      "max_ms": 4079.8,
+      "errors": {}
+    }
+  ]
+}
