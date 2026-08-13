@@ -66,6 +66,29 @@ def _extract_questions(company: str, role: str, resume_text: str) -> list[dict]:
     return data.get("questions", [])
 
 
+async def _extract_questions_async(
+    company: str, role: str, resume_text: str
+) -> list[dict]:
+    """_extract_questions 의 비동기 버전.
+
+    동기 httpx.Client 는 AI 응답(수십 초) 동안 워커 스레드를 통째로 붙잡지만,
+    AsyncClient + await 는 그 시간을 이벤트 루프에서 다중화한다. 단일 워커가
+    수많은 in-flight AI 호출을 동시에 흘려보낼 수 있다.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=_AI_TIMEOUT_SECONDS) as client:
+            response = await client.post(
+                f"{settings.AI_SERVER_URL}/question-extract",
+                json={"company": company, "role": role, "resume_text": resume_text},
+            )
+            response.raise_for_status()
+            data = response.json()
+    except (httpx.HTTPError, ValueError):
+        raise AIServerError()
+
+    return data.get("questions", [])
+
+
 def _get_owned_application(
     db: Session, user_id: uuid.UUID, application_id: uuid.UUID
 ) -> Application:
@@ -205,6 +228,87 @@ def generate_more_questions(
         new_questions.append(
             Question(
                 application_id=application.application_id,
+                question=text,
+                category=item.get("category"),
+                sequence=sequence,
+            )
+        )
+
+    if new_questions:
+        db.add_all(new_questions)
+        db.commit()
+        for question in new_questions:
+            db.refresh(question)
+
+    return new_questions
+
+
+def _read_generate_inputs(
+    db: Session, user_id: uuid.UUID, application_id: uuid.UUID
+) -> tuple[uuid.UUID, str, str, str, set[str], int]:
+    """generate 의 동기 DB 읽기 단계.
+
+    소유권 검증 + 자소서/기존 질문/max sequence 조회 후 commit 으로 트랜잭션을
+    끝내 **커넥션을 풀에 반환**한다. 이후의 AI 호출(수 초)은 커넥션을 붙잡지 않는다.
+    → 커넥션 풀(15) 이 AI 대기 시간에 묶이지 않아 동시성 상한이 크게 오른다.
+    """
+    application = _get_owned_application(db, user_id, application_id)
+    if (application.stage, application.status) not in ALLOWED_STAGES:
+        raise SpeechPracticeNotAllowedError()
+
+    statements = (
+        db.query(PersonalStatement)
+        .filter(PersonalStatement.application_id == application.application_id)
+        .order_by(PersonalStatement.sequence)
+        .all()
+    )
+    resume_text = "\n\n".join(f"{item.question}\n{item.content}" for item in statements)
+    existing_texts = {
+        text
+        for (text,) in db.query(Question.question)
+        .filter(Question.application_id == application.application_id)
+        .all()
+    }
+    max_sequence = (
+        db.query(func.max(Question.sequence))
+        .filter(Question.application_id == application.application_id)
+        .scalar()
+        or 0
+    )
+    # AI 호출에 필요한 값은 primitive 로 뽑아둔다 (commit 후 ORM 객체는 만료됨).
+    app_id = application.application_id
+    company = application.company_name
+    position = application.position
+    db.commit()  # 읽기 트랜잭션 종료 → 커넥션 반환 (AI await 동안 미점유)
+    return app_id, company, position, resume_text, existing_texts, max_sequence
+
+
+async def generate_more_questions_async(
+    db: Session, user_id: uuid.UUID, application_id: uuid.UUID
+) -> list[Question]:
+    """generate_more_questions 의 비동기 버전.
+
+    (동기 읽기 → 커넥션 반환) → (AI await, 커넥션 미점유) → (동기 쓰기) 순서로
+    외부 I/O 대기 동안 DB 커넥션·워커 스레드를 모두 놓는다.
+    """
+    app_id, company, position, resume_text, existing_texts, max_sequence = (
+        _read_generate_inputs(db, user_id, application_id)
+    )
+
+    extracted = await _extract_questions_async(company, position, resume_text)
+
+    new_questions: list[Question] = []
+    seen = set(existing_texts)
+    sequence = max_sequence
+    for item in extracted:
+        text = item.get("text", "")
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        sequence += 1
+        new_questions.append(
+            Question(
+                application_id=app_id,
                 question=text,
                 category=item.get("category"),
                 sequence=sequence,
