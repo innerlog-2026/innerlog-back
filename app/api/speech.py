@@ -69,23 +69,50 @@ def list_speech_practice_questions(
     )
 
 
+def _build_generate_response(application_id: uuid.UUID, added):
+    return SpeechPracticeQuestionGenerateResponse(
+        application_id=application_id,
+        added_count=len(added),
+        questions=[QuestionItem.model_validate(question) for question in added],
+    )
+
+
 @router.post(
     "/{application_id}/questions",
     response_model=SpeechPracticeQuestionGenerateResponse,
     status_code=201,
     **generate_speech_practice_questions_docs,
 )
-def generate_speech_practice_questions(
+async def generate_speech_practice_questions(
     application_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    added = speech_service.generate_more_questions(db, current_user.user_id, application_id)
-    return SpeechPracticeQuestionGenerateResponse(
-        application_id=application_id,
-        added_count=len(added),
-        questions=[QuestionItem.model_validate(question) for question in added],
-    )
+    added = await speech_service.generate_more_questions_async(db, current_user.user_id, application_id)
+    return _build_generate_response(application_id, added)
+
+
+# ── 부하테스트 비교용 SPEECH_SYNC 토글 (비활성) ────────────────────────────────
+# 아래 블록을 살리면 SPEECH_SYNC=1 일 때 리팩토링 이전 동작(동기 def 라우트 → 스레드풀
+# + AI 호출 내내 DB 커넥션 점유)을 재현해 sync/async 부하 비교를 할 수 있다.
+# 재현할 때만 사용: 위 async 라우트를 제거하고 아래를 활성화 + 파일 상단에 `import os` 추가.
+#
+# if os.getenv("SPEECH_SYNC") == "1":
+#     @router.post(
+#         "/{application_id}/questions",
+#         response_model=SpeechPracticeQuestionGenerateResponse,
+#         status_code=201,
+#         **generate_speech_practice_questions_docs,
+#     )
+#     def generate_speech_practice_questions(
+#         application_id: uuid.UUID,
+#         current_user: User = Depends(get_current_user),
+#         db: Session = Depends(get_db),
+#     ):
+#         added = speech_service.generate_more_questions(db, current_user.user_id, application_id)
+#         return _build_generate_response(application_id, added)
+# else:
+#     # (위 async 라우트가 이 else 분기에 해당)
 
 
 @router.post(

@@ -19,3 +19,6 @@ __pycache__/
 
 # Claude Code 로컬 설정 (개인/머신 한정)
 .claude/settings.local.json
+
+# 부하테스트 시드 (생성물 — JWT 토큰 포함)
+loadtest/seed_data.json

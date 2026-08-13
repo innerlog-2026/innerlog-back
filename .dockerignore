@@ -22,3 +22,6 @@ docker-compose*.yml
 
 # 문서
 README.md
+
+# 부하테스트 도구 (개발 전용)
+loadtest/
