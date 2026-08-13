@@ -4,7 +4,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.application import ApplicationStatusEnum, StageEnum
+from app.models.application import ApplicationStatusEnum, StageEnum, StageStatusEnum
 
 
 class ApplicationCreateRequest(BaseModel):
@@ -28,4 +28,38 @@ class ApplicationResponse(BaseModel):
     date: Optional[date_type]
     status: ApplicationStatusEnum
     created_at: datetime
+    updated_at: datetime
+
+
+class ApplicationListItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    application_id: uuid.UUID = Field(..., description="지원 현황 ID")
+    company_name: str = Field(..., description="기업명", examples=["토스 뱅크"])
+    stage: Optional[StageEnum] = Field(None, description="전형 단계", examples=["서류전형"])
+    status: ApplicationStatusEnum = Field(..., description="현황 (PREPARING / IN_PROGRESS / COMPLETED)")
+
+
+class ApplicationListResponse(BaseModel):
+    items: list[ApplicationListItem] = Field(..., description="지원 현황 목록 (최신순)")
+    page: int = Field(..., description="현재 페이지 번호 (1부터)", examples=[1])
+    size: int = Field(..., description="페이지당 항목 수", examples=[5])
+    total_count: int = Field(..., description="전체 지원 현황 수", examples=[12])
+    total_pages: int = Field(..., description="전체 페이지 수", examples=[3])
+    has_next: bool = Field(..., description="다음 페이지 존재 여부")
+
+
+class StageResultUpdateRequest(BaseModel):
+    stage: StageEnum = Field(..., description="현재 진행 단계", examples=["1차면접"])
+    status: StageStatusEnum = Field(
+        ..., description="해당 단계 상태 (진행중 / 합격 / 탈락). '대기'는 저장하지 않음", examples=["합격"]
+    )
+
+
+class StageResultResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    application_id: uuid.UUID
+    stage: StageEnum
+    status: StageStatusEnum
     updated_at: datetime
