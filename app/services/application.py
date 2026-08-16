@@ -34,6 +34,29 @@ def create_application(db: Session, user_id: uuid.UUID, body: ApplicationCreateR
         status=body.status,
     )
     db.add(application)
+    db.flush()  # application_id 확보 (아래 단계별 행 FK에 필요)
+
+    # 생성 시 timeline 시딩: 현재 단계까지 도달한 것으로 보고
+    # 이전 단계 = 합격, 현재 단계 = 진행중 (이후 단계는 대기 = 행 없음)
+    if body.stage is not None:
+        pipeline = list(StageEnum)
+        current_index = pipeline.index(body.stage)
+        for prev_stage in pipeline[:current_index]:
+            db.add(
+                ApplicationStage(
+                    application_id=application.application_id,
+                    stage=prev_stage,
+                    status=StageStatusEnum.PASS,
+                )
+            )
+        db.add(
+            ApplicationStage(
+                application_id=application.application_id,
+                stage=body.stage,
+                status=StageStatusEnum.IN_PROGRESS,
+            )
+        )
+
     db.commit()
     db.refresh(application)
     return application
