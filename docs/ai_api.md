@@ -6,12 +6,7 @@
 - **명세 기준일:** 2026-08-16 (v2)
 - 우리 백엔드는 이 AI 서버를 HTTP로 **호출만** 한다. (AI 로직은 별도 프로세스)
 
-> ⚠️ **v2 반영 현황**
->
-> - **회고(chat) 관련 — `1. /chat`, `4. /summarize` 는 v2 기준으로 갱신됨.**
-> - **스피치 관련 — `2. /question-extract`, `3. /speech-analyze` 는 아직 v1 기준 문서이며 백엔드 코드도 미대응.** v2에서 아래가 바뀌었으므로 후속 작업 필요:
->   - `/question-extract`: 응답 `questions[].text` → **`question`**, 총 12개(인성 4 / 기술 4 / 공통 4), 자소서 50자 미만이면 400
->   - `/speech-analyze`: 요청 `audio_file_path` → **`audio_path`**, 응답 구조 변경(`star_score`가 `{present, comment}` 객체, 최상위 `feedback` 제거 → `content.overall`, `coherence`가 `{summary, detail}` 객체, `content.question_type` 추가)
+> **v2 반영 완료** — 아래 5개 엔드포인트 모두 v2 기준이며 백엔드도 대응 완료.
 
 ---
 
@@ -112,13 +107,16 @@
 ```json
 {
   "questions": [
-    { "text": "Spring Boot 프로젝트에서 가장 어려웠던 기술적 문제는 무엇이었나요?", "category": "기술" },
-    { "text": "팀 프로젝트에서 API 설계 과정 중 갈등이 생겼을 때 어떻게 해결하셨나요?", "category": "인성" },
-    { "text": "카카오에 지원한 이유가 무엇인가요?", "category": "공통" }
+    { "question": "Spring Boot 프로젝트에서 가장 어려웠던 기술적 문제는 무엇이었나요?", "category": "기술" },
+    { "question": "팀 프로젝트에서 API 설계 과정 중 갈등이 생겼을 때 어떻게 해결하셨나요?", "category": "인성" },
+    { "question": "카카오에 지원한 이유가 무엇인가요?", "category": "공통" }
   ]
 }
 ```
 
+- **v1 → v2:** 응답 필드명 `text` → **`question`**
+- **총 12개** 반환 (인성 4 / 기술 4 / 공통 4)
+- `resume_text` 가 **50자 미만이면 400** 에러
 - `category` 허용값: `인성` / `기술` / `공통`
 - ⚠️ **응답 시간: 30초~1분** (RAG 검색 + LLM 호출) → 백엔드 httpx timeout 넉넉히 설정 필요.
 
@@ -126,82 +124,62 @@
 
 ## 3. `POST /speech-analyze` — 스피치 분석
 
+음성 파일 경로를 받아 STT 변환 후 음향 + 내용 분석 반환. 백엔드는 파일을 공유 볼륨에 저장하고 **경로만** 넘긴다.
+
 ### 요청
 
 ```json
 {
-  "audio_file_path": "/uploads/audio/abc123.wav",
-  "question_text": "팀 프로젝트에서 갈등이 생겼을 때 어떻게 해결하셨나요?"
+  "audio_path": "/shared/audio/ckmk_a_ict_m_e_42650.wav",
+  "question_text": "팀 프로젝트에서 갈등을 해결한 경험이 있나요?"
 }
 ```
+
+> `question_text` 는 **선택**. 있으면 질문 유형(행동형/의견형/기술형/가정형)을 판별해 STAR 적용 여부를 결정한다.
 
 ### 응답
 
 ```json
 {
   "acoustic": {
-    "speed_wpm": 78.0,
-    "speed_label": "평균(90.14어절/분)보다 느린 편이에요",
-    "filler_words": { "그": 1 },
-    "silence_count": 0,
-    "duration_sec": 86.2,
-    "word_count": 112
+    "speed_wpm": 87.5,
+    "speed_label": "적절",
+    "filler_words": { "음": 2, "어": 1 },
+    "silence_count": 1,
+    "duration_sec": 62,
+    "word_count": 90
   },
   "content": {
+    "question_type": "행동형",
     "star_score": {
-      "situation": true,
-      "task": false,
-      "action": true,
-      "result": true
+      "situation": { "present": true, "comment": "배경 상황이 구체적으로 설명됐습니다." },
+      "task": { "present": false, "comment": "본인의 역할이 명확히 드러나지 않았습니다." },
+      "action": { "present": true, "comment": "구체적인 행동이 잘 서술됐습니다." },
+      "result": { "present": true, "comment": "결과가 명확히 제시됐습니다." }
     },
-    "coherence": "논리 흐름 양호",
-    "keyword_repeat": {},
-    "negative_reframe": {
-      "detected": true,
-      "expressions": ["발표에 약한 편이에요"],
-      "feedback": "면접에서 약점을 직접 드러내는 표현이 있어요. 굳이 언급하지 않는 것이 좋아요."
-    }
-  },
-  "feedback": {
-    "star_detail": {
-      "situation": {
-        "present": true,
-        "excerpt": "해당 발췌 문장",
-        "comment": "상황이 잘 설명되어 있어요."
-      },
-      "task": {
-        "present": false,
-        "excerpt": null,
-        "comment": "과제/목표가 명시되지 않았어요. 한 문장 추가해보세요."
-      },
-      "action": {
-        "present": true,
-        "excerpt": "해당 발췌 문장",
-        "comment": "구체적인 행동이 잘 드러나 있어요."
-      },
-      "result": {
-        "present": true,
-        "excerpt": "해당 발췌 문장",
-        "comment": "결과가 명확하게 언급되어 있어요."
-      }
-    },
-    "star_overall": "전체적으로 STAR 흐름이 잘 잡혀 있어요. Task 부분만 보완하면 됩니다.",
-    "coherence_detail": "결론이 자연스럽게 마지막에 위치해 있어요.",
-    "overall": "답변 구조가 좋습니다. Task를 추가하고 결과에 수치를 넣으면 더 설득력 있어요."
+    "coherence": { "summary": "논리 흐름 양호", "detail": null },
+    "keyword_repeat": { "프로젝트": 4 },
+    "negative_reframe": { "detected": false, "expressions": [], "feedback": null },
+    "overall": "전반적으로 경험을 잘 구조화해서 설명했습니다."
   }
 }
 ```
 
-### 변경사항 (v1 → v2)
+> `question_text` 가 없거나 행동형 질문이 아니면 **`star_score` 는 null** 로 온다.
 
-| 항목                | 변경 내용                     |
-| ------------------- | ----------------------------- |
-| `sentiment`         | ❌ 제거 (긍정/중립/부정 비율) |
-| `connectives_count` | ❌ 제거 (논리 연결어 횟수)    |
-| `negative_reframe`  | ✅ 추가 (약점 노출 표현 감지) |
+### v1 → v2 변경점
 
-> - **`feedback` 필드 전체 DB 저장 필요** (재조회 가능해야 함 — 확인 완료)
-> - `negative_reframe` 미감지 시: `{"detected": false, "expressions": [], "feedback": null}`
+| 항목 | v1 | v2 |
+| --- | --- | --- |
+| 요청 오디오 경로 | `audio_file_path` | **`audio_path`** |
+| `star_score` | `{situation: true, …}` 단순 bool | **`{situation: {present, comment}, …}` 객체** (행동형만, 아니면 null) |
+| `coherence` | 문자열 | **`{summary, detail}` 객체** |
+| 최상위 `feedback` | 있음(star_detail/star_overall/…) | **제거** → 종합 피드백은 **`content.overall`** |
+| `content.question_type` | 없음 | **추가** (행동형/의견형/기술형/가정형) |
+| `speed_label` | 문장형 | 짧은 라벨 (`느린 편`/`적절`/`빠른 편`) |
+| `silence_count` | 침묵 구간 수 | **1.5초 이상** 침묵 횟수 |
+
+> **백엔드 저장:** `star_score`/`coherence` 는 JSONB 로 저장하며, CHECK 제약으로 최소 구조(4개 키 존재 + `present` 가 boolean)를 강제한다. 미지의 키는 허용해 명세 확장을 흡수한다. (`app/models/submission.py`)
 
 ---
 
