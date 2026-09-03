@@ -136,5 +136,4 @@ def analyze_speech_submission(
         question_id=question_id,
         acoustic=result.get("acoustic") or {},
         content=result.get("content") or {},
-        feedback=result.get("feedback") or {},
     )

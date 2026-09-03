@@ -141,7 +141,7 @@ def create_speech_practice(
     questions = [
         Question(
             application_id=application.application_id,
-            question=item.get("text", ""),
+            question=item.get("question", ""),
             category=item.get("category"),
             sequence=sequence,
         )
@@ -220,7 +220,7 @@ def generate_more_questions(
     seen = set(existing_texts)
     sequence = max_sequence
     for item in extracted:
-        text = item.get("text", "")
+        text = item.get("question", "")
         if not text or text in seen:
             continue
         seen.add(text)
@@ -301,7 +301,7 @@ async def generate_more_questions_async(
     seen = set(existing_texts)
     sequence = max_sequence
     for item in extracted:
-        text = item.get("text", "")
+        text = item.get("question", "")
         if not text or text in seen:
             continue
         seen.add(text)
@@ -378,7 +378,7 @@ def _analyze_speech_ai(audio_file_path: str, question_text: str) -> dict:
             response = client.post(
                 f"{settings.AI_SERVER_URL}/speech-analyze",
                 json={
-                    "audio_file_path": audio_file_path,
+                    "audio_path": audio_file_path,
                     "question_text": question_text,
                 },
             )
@@ -417,12 +417,9 @@ def analyze_speech(
 
     acoustic = result.get("acoustic") or {}
     content = result.get("content") or {}
-    star_score = content.get("star_score") or {}
 
-    analysis = SpeechAnalysis(
-        submission_id=submission.submission_id,
-        feedback=result.get("feedback"),
-    )
+    # v2 에는 최상위 feedback 이 없다 (종합 피드백은 content.overall)
+    analysis = SpeechAnalysis(submission_id=submission.submission_id)
     db.add(analysis)
     db.flush()
 
@@ -440,13 +437,14 @@ def analyze_speech(
     db.add(
         SpeechContent(
             speech_analysis_id=analysis.speech_analysis_id,
-            star_situation=star_score.get("situation"),
-            star_task=star_score.get("task"),
-            star_action=star_score.get("action"),
-            star_result=star_score.get("result"),
+            question_type=content.get("question_type"),
+            # 행동형 질문이 아니면 star_score 는 null 로 온다.
+            # `or {}` 를 쓰면 빈 객체가 되어 CHECK 제약에 걸리므로 그대로 넘긴다.
+            star_score=content.get("star_score"),
             coherence=content.get("coherence"),
             keyword_repeat=content.get("keyword_repeat"),
             negative_reframe=content.get("negative_reframe"),
+            overall=content.get("overall"),
         )
     )
 
