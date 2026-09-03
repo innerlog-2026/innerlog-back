@@ -42,13 +42,6 @@ _STAGE_TO_TYPE: dict[StageEnum, SessionTypeEnum] = {
 # AI /chat·/summarize 모두 LLM 호출이라 넉넉히 잡는다.
 _AI_TIMEOUT_SECONDS = 90.0
 
-# 첫 인사(오프닝)를 받기 위해 AI /chat에 보내는 시작 문구.
-# AI 서버는 user_message를 그대로 LLM(Claude)에 넣는데 Claude는 빈 user 메시지를 거부하므로
-# 비어있지 않아야 한다. 또한 명령형("~시작할게요")이면 Claude가 "네 알겠습니다" 같은 확인 멘트로
-# 응답하므로, 확인/인사 없이 바로 시작하도록 지시형으로 작성한다.
-# 이 문구는 오프닝 트리거용이라 사용자에게 보여줄 chat으로 저장하지 않는다.
-_OPENING_MESSAGE = '(면접 회고를 시작합니다. "네 알겠습니다" 같은 확인·인사 없이, 바로 도입 문장과 첫 질문으로 시작해주세요.)'
-
 
 def _get_owned_application(
     db: Session, user_id: uuid.UUID, application_id: uuid.UUID
@@ -196,8 +189,8 @@ def start_retrospect(
     db.add(session)
     db.flush()  # session_id 확보 (AI /chat에 넘겨야 함)
 
-    # 오프닝 트리거 문구로 첫 AI 인사를 받는다 (빈 문자열은 Claude가 거부하므로 사용 불가).
-    ai_response, updated_state = _chat_ai(session.session_id, _OPENING_MESSAGE, initial_state)
+    # 첫 턴(오프닝)은 빈 user_message로 호출하면 AI가 먼저 인사 메시지를 생성한다. (AI API v2)
+    ai_response, updated_state = _chat_ai(session.session_id, "", initial_state)
 
     db.add(
         Chat(
@@ -275,14 +268,19 @@ def summarize_retrospect(
     history = (session.ai_state or {}).get("history", [])
     result = _summarize_ai(session.session_id, history)
 
+    # AI API v2는 6개 분석 항목을 analysis 객체로 중첩해 반환한다.
+    # 서버 전환기 동안 v1(평면) 응답도 받아들이도록 관대하게 파싱한다.
+    # (v2 전환이 끝나면 result["analysis"]로 단순화 가능)
+    payload = result.get("analysis") or result
+
     analysis = InterviewAnalysis(
         session_id=session.session_id,
-        summary=result.get("summary"),
-        hypothesis=result.get("hypothesis"),
-        strengths=result.get("strengths"),
-        weaknesses=result.get("weaknesses"),
-        gap_analysis=result.get("gap_analysis"),
-        actions=result.get("actions"),
+        summary=payload.get("summary"),
+        hypothesis=payload.get("hypothesis"),
+        strengths=payload.get("strengths"),
+        weaknesses=payload.get("weaknesses"),
+        gap_analysis=payload.get("gap_analysis"),
+        actions=payload.get("actions"),
     )
     db.add(analysis)
 
