@@ -34,6 +34,14 @@ async def health():
     return {"status": "ok"}
 
 
+# ⚠️ 아래 스피치 2개는 아직 v1 형태다.
+# 백엔드(app/services/speech.py)가 v1 기준으로 파싱하고 있어, 여기만 v2로 바꾸면
+# 부하테스트가 깨진다(질문 텍스트가 빈 문자열이 되어 dedup 이 무너짐).
+# 백엔드 스피치 코드를 v2로 고칠 때 아래를 함께 전환할 것:
+#   - /question-extract : questions[].text -> question (총 12개: 인성4/기술4/공통4)
+#   - /speech-analyze   : 요청 audio_file_path -> audio_path,
+#                         응답 star_score 객체화 / 최상위 feedback 제거 -> content.overall /
+#                         coherence 객체화 / content.question_type 추가
 @app.post("/question-extract")
 async def question_extract(payload: dict):
     await asyncio.sleep(AI_DELAY_SECONDS)
@@ -69,26 +77,41 @@ async def speech_analyze(payload: dict):
 
 @app.post("/chat")
 async def chat(payload: dict):
+    """AI API v2: 첫 턴은 user_message="" 로 오면 AI가 먼저 인사를 생성한다."""
     await asyncio.sleep(AI_DELAY_SECONDS)
     state = dict(payload.get("state") or {})
+    user_message = payload.get("user_message", "")
+    is_opening = state.get("total_turn_count", 0) == 0 and user_message == ""
+
+    ai_response = "(mock) 안녕하세요, 회고를 시작할게요." if is_opening else "(mock) 다음 질문입니다."
+
+    history = list(state.get("history") or [])
+    if user_message:  # v2 오프닝의 빈 문자열은 히스토리에 남기지 않는다
+        history.append({"role": "user", "content": user_message})
+    history.append({"role": "assistant", "content": ai_response})
+
     state["stage_turn_count"] = state.get("stage_turn_count", 0) + 1
     state["total_turn_count"] = state.get("total_turn_count", 0) + 1
-    history = list(state.get("history") or [])
-    history.append({"role": "user", "content": payload.get("user_message", "")})
-    history.append({"role": "assistant", "content": "(mock) 다음 질문입니다."})
     state["history"] = history
-    return {"ai_response": "(mock) 다음 질문입니다.", "updated_state": state}
+    return {"ai_response": ai_response, "updated_state": state}
 
 
 @app.post("/summarize")
 async def summarize(payload: dict):
+    """AI API v2: 6개 분석 항목을 analysis 객체로 중첩하고 interview_type 을 쓴다."""
     await asyncio.sleep(AI_DELAY_SECONDS)
     return {
         "session_id": payload.get("session_id"),
-        "summary": "(mock) 면접 회고 요약",
-        "hypothesis": "(mock) 가설",
-        "strengths": "(mock) 강점",
-        "weaknesses": ["(mock) 약점1", "(mock) 약점2"],
-        "gap_analysis": "(mock) 갭 분석",
-        "actions": ["(mock) 액션1", "(mock) 액션2"],
+        "company": "(mock) 카카오",
+        "role": "(mock) 백엔드",
+        "interview_type": "1차면접",
+        "result": None,
+        "analysis": {
+            "summary": "(mock) 면접 회고 요약",
+            "hypothesis": "(mock) 가설",
+            "strengths": "(mock) 강점",
+            "weaknesses": ["(mock) 약점1", "(mock) 약점2"],
+            "gap_analysis": "(mock) 갭 분석",
+            "actions": ["(mock) 액션1", "(mock) 액션2"],
+        },
     }
