@@ -6,6 +6,7 @@ from app.core.exceptions import (
     InvalidAudioFileError,
     InvalidTokenError,
     QuestionNotFoundError,
+    ResumeTooShortError,
     SpeechPracticeAlreadyExistsError,
     SpeechPracticeNotAllowedError,
 )
@@ -20,6 +21,7 @@ _speech_already_exists_response = error_response(
     "이미 스피치 연습이 생성됨", SpeechPracticeAlreadyExistsError
 )
 _question_not_found_response = error_response("질문 없음", QuestionNotFoundError)
+_resume_too_short_response = error_response("자기소개서 길이 부족", ResumeTooShortError)
 _invalid_audio_response = error_response("잘못된 음성 파일 형식", InvalidAudioFileError)
 _audio_too_large_response = error_response("음성 파일 용량 초과", AudioFileTooLargeError)
 
@@ -41,6 +43,7 @@ generate_speech_practice_questions_docs = dict(
     ),
     responses={
         201: {"description": "예상 질문 추가 생성 성공"},
+        400: _resume_too_short_response,
         401: _unauthorized_response,
         403: _speech_not_allowed_response,
         404: _application_not_found_response,
@@ -53,6 +56,7 @@ create_speech_practice_docs = dict(
     description="예상 질문 생성 API. 지원 현황당 최초 1회만 호출할 수 있습니다.",
     responses={
         201: {"description": "예상 질문 생성 성공"},
+        400: _resume_too_short_response,
         401: _unauthorized_response,
         403: _speech_not_allowed_response,
         404: _application_not_found_response,

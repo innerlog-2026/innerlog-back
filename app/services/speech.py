@@ -14,6 +14,7 @@ from app.core.exceptions import (
     InvalidAudioFileError,
     QuestionNotFoundError,
     SpeechPracticeAlreadyExistsError,
+    ResumeTooShortError,
     SpeechPracticeNotAllowedError,
 )
 from app.models.application import (
@@ -46,6 +47,9 @@ ALLOWED_STAGES: set[tuple[StageEnum, ApplicationStatusEnum]] = {
 _AI_TIMEOUT_SECONDS = 90.0
 # 스피치 분석은 오디오 전사 + 분석이라 질문 생성보다 더 오래 걸릴 수 있어 넉넉히 잡는다.
 _SPEECH_AI_TIMEOUT_SECONDS = 180.0
+# AI /question-extract 는 자소서가 이보다 짧으면 400 을 반환한다 (AI API v2).
+# 왕복을 돌기 전에 백엔드에서 먼저 걸러 사용자에게 명확한 에러를 준다.
+_MIN_RESUME_LENGTH = 50
 _ALLOWED_AUDIO_EXTENSIONS = {".mp3", ".wav"}
 _MAX_AUDIO_BYTES = 100 * 1024 * 1024  # 100MB
 
@@ -87,6 +91,14 @@ async def _extract_questions_async(
         raise AIServerError()
 
     return data.get("questions", [])
+
+
+def _build_resume_text(statements) -> str:
+    """자소서 문항/내용을 AI 에 보낼 하나의 텍스트로 합치고 최소 길이를 검증한다."""
+    resume_text = "\n\n".join(f"{item.question}\n{item.content}" for item in statements)
+    if len(resume_text.strip()) < _MIN_RESUME_LENGTH:
+        raise ResumeTooShortError()
+    return resume_text
 
 
 def _get_owned_application(
@@ -132,9 +144,7 @@ def create_speech_practice(
             )
         )
 
-    resume_text = "\n\n".join(
-        f"{item.question}\n{item.content}" for item in body.personal_statements
-    )
+    resume_text = _build_resume_text(body.personal_statements)
 
     extracted = _extract_questions(body.company_name, body.position, resume_text)
 
@@ -197,7 +207,7 @@ def generate_more_questions(
         .order_by(PersonalStatement.sequence)
         .all()
     )
-    resume_text = "\n\n".join(f"{item.question}\n{item.content}" for item in statements)
+    resume_text = _build_resume_text(statements)
 
     extracted = _extract_questions(
         application.company_name, application.position, resume_text
@@ -262,7 +272,7 @@ def _read_generate_inputs(
         .order_by(PersonalStatement.sequence)
         .all()
     )
-    resume_text = "\n\n".join(f"{item.question}\n{item.content}" for item in statements)
+    resume_text = _build_resume_text(statements)
     existing_texts = {
         text
         for (text,) in db.query(Question.question)

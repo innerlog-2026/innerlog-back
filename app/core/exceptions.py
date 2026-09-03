@@ -56,6 +56,15 @@ class SpeechPracticeAlreadyExistsError(InnerLogException):
         super().__init__(409, "SPEECH_409", "이미 스피치 연습이 생성된 지원 현황입니다.")
 
 
+class ResumeTooShortError(InnerLogException):
+    def __init__(self):
+        super().__init__(
+            400,
+            "SPEECH_RESUME_400",
+            "자기소개서 내용이 너무 짧습니다. 예상 질문을 생성하려면 최소 50자 이상 필요합니다.",
+        )
+
+
 class RetrospectNotAllowedError(InnerLogException):
     def __init__(self):
         super().__init__(403, "RETROSPECT_403", "현재 전형 단계에서는 면접 회고를 사용할 수 없습니다.")
