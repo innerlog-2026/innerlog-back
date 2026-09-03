@@ -23,9 +23,9 @@ app = FastAPI(title="Mock AI Server (loadtest)")
 # generate_more_questions 의 dedup 과 맞물리도록 "고정" 질문 세트를 돌려준다.
 # 시드 스크립트가 동일한 텍스트를 미리 넣어두면 steady-state 에서 added_count=0 (일정한 부하).
 _FIXED_QUESTIONS = [
-    {"text": "Spring Boot 프로젝트에서 가장 어려웠던 기술적 문제는 무엇이었나요?", "category": "기술"},
-    {"text": "팀 프로젝트에서 갈등이 생겼을 때 어떻게 해결하셨나요?", "category": "인성"},
-    {"text": "우리 회사에 지원한 이유가 무엇인가요?", "category": "공통"},
+    {"question": "Spring Boot 프로젝트에서 가장 어려웠던 기술적 문제는 무엇이었나요?", "category": "기술"},
+    {"question": "팀 프로젝트에서 갈등이 생겼을 때 어떻게 해결하셨나요?", "category": "인성"},
+    {"question": "우리 회사에 지원한 이유가 무엇인가요?", "category": "공통"},
 ]
 
 
@@ -34,14 +34,6 @@ async def health():
     return {"status": "ok"}
 
 
-# ⚠️ 아래 스피치 2개는 아직 v1 형태다.
-# 백엔드(app/services/speech.py)가 v1 기준으로 파싱하고 있어, 여기만 v2로 바꾸면
-# 부하테스트가 깨진다(질문 텍스트가 빈 문자열이 되어 dedup 이 무너짐).
-# 백엔드 스피치 코드를 v2로 고칠 때 아래를 함께 전환할 것:
-#   - /question-extract : questions[].text -> question (총 12개: 인성4/기술4/공통4)
-#   - /speech-analyze   : 요청 audio_file_path -> audio_path,
-#                         응답 star_score 객체화 / 최상위 feedback 제거 -> content.overall /
-#                         coherence 객체화 / content.question_type 추가
 @app.post("/question-extract")
 async def question_extract(payload: dict):
     await asyncio.sleep(AI_DELAY_SECONDS)
@@ -50,27 +42,29 @@ async def question_extract(payload: dict):
 
 @app.post("/speech-analyze")
 async def speech_analyze(payload: dict):
+    """AI API v2 응답 구조 (star_score 객체화 / coherence 객체 / content.overall)."""
     await asyncio.sleep(AI_DELAY_SECONDS)
     return {
         "acoustic": {
-            "speed_wpm": 78.0,
-            "speed_label": "평균보다 느린 편이에요",
-            "filler_words": {"그": 1},
-            "silence_count": 0,
-            "duration_sec": 86.2,
-            "word_count": 112,
+            "speed_wpm": 87.5,
+            "speed_label": "적절",
+            "filler_words": {"음": 2, "어": 1},
+            "silence_count": 1,
+            "duration_sec": 62,
+            "word_count": 90,
         },
         "content": {
-            "star_score": {"situation": True, "task": False, "action": True, "result": True},
-            "coherence": "논리 흐름 양호",
-            "keyword_repeat": {},
+            "question_type": "행동형",
+            "star_score": {
+                "situation": {"present": True, "comment": "배경 상황이 구체적으로 설명됐습니다."},
+                "task": {"present": False, "comment": "본인의 역할이 명확히 드러나지 않았습니다."},
+                "action": {"present": True, "comment": "구체적인 행동이 잘 서술됐습니다."},
+                "result": {"present": True, "comment": "결과가 명확히 제시됐습니다."},
+            },
+            "coherence": {"summary": "논리 흐름 양호", "detail": None},
+            "keyword_repeat": {"프로젝트": 4},
             "negative_reframe": {"detected": False, "expressions": [], "feedback": None},
-        },
-        "feedback": {
-            "star_detail": {},
-            "star_overall": "STAR 흐름 양호",
-            "coherence_detail": "결론이 자연스럽게 마지막에 위치",
-            "overall": "답변 구조가 좋습니다.",
+            "overall": "전반적으로 경험을 잘 구조화해서 설명했습니다.",
         },
     }
 
