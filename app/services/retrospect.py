@@ -268,8 +268,8 @@ def summarize_retrospect(
     history = (session.ai_state or {}).get("history", [])
     result = _summarize_ai(session.session_id, history)
 
-    # AI API v2는 6개 분석 항목을 analysis 객체로 중첩해 반환한다.
-    # 서버 전환기 동안 v1(평면) 응답도 받아들이도록 관대하게 파싱한다.
+    # AI API v2는 6개 분석 항목을 analysis 객체로 중첩해 반환
+    # 서버 전환기 동안 v1(평면) 응답도 받아들이도록 관대하게 파싱
     # (v2 전환이 끝나면 result["analysis"]로 단순화 가능)
     payload = result.get("analysis") or result
 

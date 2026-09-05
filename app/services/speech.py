@@ -47,8 +47,8 @@ ALLOWED_STAGES: set[tuple[StageEnum, ApplicationStatusEnum]] = {
 _AI_TIMEOUT_SECONDS = 90.0
 # 스피치 분석은 오디오 전사 + 분석이라 질문 생성보다 더 오래 걸릴 수 있어 넉넉히 잡는다.
 _SPEECH_AI_TIMEOUT_SECONDS = 180.0
-# AI /question-extract 는 자소서가 이보다 짧으면 400 을 반환한다 (AI API v2).
-# 왕복을 돌기 전에 백엔드에서 먼저 걸러 사용자에게 명확한 에러를 준다.
+# AI /question-extract 는 자소서가 이보다 짧으면 400 을 반환 (AI API v2)
+# 왕복을 돌기 전에 백엔드에서 먼저 걸러 명확한 에러를 반환함.
 _MIN_RESUME_LENGTH = 50
 _ALLOWED_AUDIO_EXTENSIONS = {".mp3", ".wav"}
 _MAX_AUDIO_BYTES = 100 * 1024 * 1024  # 100MB
@@ -94,7 +94,7 @@ async def _extract_questions_async(
 
 
 def _build_resume_text(statements) -> str:
-    """자소서 문항/내용을 AI 에 보낼 하나의 텍스트로 합치고 최소 길이를 검증한다."""
+    """자소서 문항/내용을 AI 에 보낼 하나의 텍스트로 합치고 최소 길이를 검증함."""
     resume_text = "\n\n".join(f"{item.question}\n{item.content}" for item in statements)
     if len(resume_text.strip()) < _MIN_RESUME_LENGTH:
         raise ResumeTooShortError()
@@ -428,7 +428,7 @@ def analyze_speech(
     acoustic = result.get("acoustic") or {}
     content = result.get("content") or {}
 
-    # v2 에는 최상위 feedback 이 없다 (종합 피드백은 content.overall)
+    # v2 에는 최상위 feedback 이 없음 (종합 피드백은 content.overall)
     analysis = SpeechAnalysis(submission_id=submission.submission_id)
     db.add(analysis)
     db.flush()

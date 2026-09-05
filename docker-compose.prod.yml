@@ -35,10 +35,7 @@ services:
     env_file:
       - .env.ai
     ports:
-      # 호스트 8001 -> 컨테이너 8000. 호스트 공개 포트(8001)는 디버깅용이고,
-      # backend 는 compose 네트워크로 http://ai:8000 (컨테이너 내부 포트) 을 호출한다.
-      # AI 명세의 ":8001" 은 호스트 기준 주소이므로 AI_SERVER_URL 을 8001 로 바꾸면 안 된다.
-      - "127.0.0.1:8001:8000"
+      - "127.0.0.1:8001:8000" # 호스트 8001 -> 컨테이너 8000. backend 는 http://ai:8000 으로 호출
     volumes:
       - audio_data:/uploads/audio # backend와 같은 볼륨을 같은 경로에 마운트
       - hf_models:/models

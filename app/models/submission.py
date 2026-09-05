@@ -58,8 +58,8 @@ class SpeechAcoustic(Base):
 
 class SpeechContent(Base):
     __tablename__ = "speech_content"
-    # JSONB 를 쓰되 "앱이 의존하는 불변식"만 DB 레벨에서 강제한다.
-    # 미지의 키(예: 명세 추가 필드)는 통과시켜 JSONB 의 유연성을 유지한다.
+    # JSONB 를 쓰되 "앱이 의존하는 불변식"만 DB 레벨에서 강제
+    # 미지의 키(예: 명세 추가 필드)는 통과시켜 JSONB 의 유연성을 유지
     __table_args__ = (
         CheckConstraint(
             "star_score IS NULL OR ("

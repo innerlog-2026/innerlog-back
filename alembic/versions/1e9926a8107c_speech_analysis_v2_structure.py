@@ -4,11 +4,11 @@ Revision ID: 1e9926a8107c
 Revises: 789985e24523
 Create Date: 2026-08-14
 
-AI API v2의 /speech-analyze 응답 구조 변경을 반영한다.
+AI API v2의 /speech-analyze 응답 구조 변경을 반영
 
 - star_score: Boolean 4개 -> JSONB 1개 ({situation|task|action|result: {present, comment}})
   행동형 질문이 아니면 전체 NULL. 외부 명세가 자주 바뀌어 JSONB 로 흡수하되,
-  앱이 의존하는 불변식(4개 키 존재 + present 가 boolean)만 CHECK 로 강제한다.
+  앱이 의존하는 불변식(4개 키 존재 + present 가 boolean)만 CHECK 로 강제
 - coherence: String -> JSONB ({summary, detail})
 - question_type / overall 추가 (v2 는 최상위 feedback 이 없고 content.overall 로 통합)
 - speech_analysis.feedback 제거
@@ -45,7 +45,7 @@ _COHERENCE_CHECK = (
 
 def upgrade() -> None:
     """Upgrade schema."""
-    # v2 에는 최상위 feedback 이 없다 (content.overall 로 통합)
+    # v2 에는 최상위 feedback 이 없음 (content.overall 로 통합)
     op.drop_column('speech_analysis', 'feedback')
 
     op.add_column('speech_content', sa.Column('question_type', sa.String(), nullable=True))
@@ -87,7 +87,7 @@ def upgrade() -> None:
         """
     )
 
-    # 데이터 이관이 끝난 뒤 제약을 건다
+    # 데이터 이관이 끝난 뒤 제약을 추가
     op.create_check_constraint('ck_speech_content_star_score', 'speech_content', _STAR_CHECK)
     op.create_check_constraint('ck_speech_content_coherence', 'speech_content', _COHERENCE_CHECK)
 
