@@ -14,6 +14,7 @@ from app.core.exceptions import (
     InvalidAudioFileError,
     QuestionNotFoundError,
     SpeechPracticeAlreadyExistsError,
+    ResumeTooShortError,
     SpeechPracticeNotAllowedError,
 )
 from app.models.application import (
@@ -46,6 +47,9 @@ ALLOWED_STAGES: set[tuple[StageEnum, ApplicationStatusEnum]] = {
 _AI_TIMEOUT_SECONDS = 90.0
 # 스피치 분석은 오디오 전사 + 분석이라 질문 생성보다 더 오래 걸릴 수 있어 넉넉히 잡는다.
 _SPEECH_AI_TIMEOUT_SECONDS = 180.0
+# AI /question-extract 는 자소서가 이보다 짧으면 400 을 반환 (AI API v2)
+# 왕복을 돌기 전에 백엔드에서 먼저 걸러 명확한 에러를 반환함.
+_MIN_RESUME_LENGTH = 50
 _ALLOWED_AUDIO_EXTENSIONS = {".mp3", ".wav"}
 _MAX_AUDIO_BYTES = 100 * 1024 * 1024  # 100MB
 
@@ -87,6 +91,14 @@ async def _extract_questions_async(
         raise AIServerError()
 
     return data.get("questions", [])
+
+
+def _build_resume_text(statements) -> str:
+    """자소서 문항/내용을 AI 에 보낼 하나의 텍스트로 합치고 최소 길이를 검증함."""
+    resume_text = "\n\n".join(f"{item.question}\n{item.content}" for item in statements)
+    if len(resume_text.strip()) < _MIN_RESUME_LENGTH:
+        raise ResumeTooShortError()
+    return resume_text
 
 
 def _get_owned_application(
@@ -132,16 +144,14 @@ def create_speech_practice(
             )
         )
 
-    resume_text = "\n\n".join(
-        f"{item.question}\n{item.content}" for item in body.personal_statements
-    )
+    resume_text = _build_resume_text(body.personal_statements)
 
     extracted = _extract_questions(body.company_name, body.position, resume_text)
 
     questions = [
         Question(
             application_id=application.application_id,
-            question=item.get("text", ""),
+            question=item.get("question", ""),
             category=item.get("category"),
             sequence=sequence,
         )
@@ -197,7 +207,7 @@ def generate_more_questions(
         .order_by(PersonalStatement.sequence)
         .all()
     )
-    resume_text = "\n\n".join(f"{item.question}\n{item.content}" for item in statements)
+    resume_text = _build_resume_text(statements)
 
     extracted = _extract_questions(
         application.company_name, application.position, resume_text
@@ -220,7 +230,7 @@ def generate_more_questions(
     seen = set(existing_texts)
     sequence = max_sequence
     for item in extracted:
-        text = item.get("text", "")
+        text = item.get("question", "")
         if not text or text in seen:
             continue
         seen.add(text)
@@ -262,7 +272,7 @@ def _read_generate_inputs(
         .order_by(PersonalStatement.sequence)
         .all()
     )
-    resume_text = "\n\n".join(f"{item.question}\n{item.content}" for item in statements)
+    resume_text = _build_resume_text(statements)
     existing_texts = {
         text
         for (text,) in db.query(Question.question)
@@ -301,7 +311,7 @@ async def generate_more_questions_async(
     seen = set(existing_texts)
     sequence = max_sequence
     for item in extracted:
-        text = item.get("text", "")
+        text = item.get("question", "")
         if not text or text in seen:
             continue
         seen.add(text)
@@ -378,7 +388,7 @@ def _analyze_speech_ai(audio_file_path: str, question_text: str) -> dict:
             response = client.post(
                 f"{settings.AI_SERVER_URL}/speech-analyze",
                 json={
-                    "audio_file_path": audio_file_path,
+                    "audio_path": audio_file_path,
                     "question_text": question_text,
                 },
             )
@@ -417,12 +427,9 @@ def analyze_speech(
 
     acoustic = result.get("acoustic") or {}
     content = result.get("content") or {}
-    star_score = content.get("star_score") or {}
 
-    analysis = SpeechAnalysis(
-        submission_id=submission.submission_id,
-        feedback=result.get("feedback"),
-    )
+    # v2 에는 최상위 feedback 이 없음 (종합 피드백은 content.overall)
+    analysis = SpeechAnalysis(submission_id=submission.submission_id)
     db.add(analysis)
     db.flush()
 
@@ -440,13 +447,14 @@ def analyze_speech(
     db.add(
         SpeechContent(
             speech_analysis_id=analysis.speech_analysis_id,
-            star_situation=star_score.get("situation"),
-            star_task=star_score.get("task"),
-            star_action=star_score.get("action"),
-            star_result=star_score.get("result"),
+            question_type=content.get("question_type"),
+            # 행동형 질문이 아니면 star_score 는 null 로 온다.
+            # `or {}` 를 쓰면 빈 객체가 되어 CHECK 제약에 걸리므로 그대로 넘긴다.
+            star_score=content.get("star_score"),
             coherence=content.get("coherence"),
             keyword_repeat=content.get("keyword_repeat"),
             negative_reframe=content.get("negative_reframe"),
+            overall=content.get("overall"),
         )
     )
 

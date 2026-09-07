@@ -14,9 +14,6 @@ __pycache__/
 *.pyc
 *.pyo
 
-# 최상위 docs 디렉터리만 무시 
-/docs/
-
 # Claude Code 로컬 설정 (개인/머신 한정)
 .claude/settings.local.json
 

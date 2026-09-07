@@ -35,7 +35,7 @@ services:
     env_file:
       - .env.ai
     ports:
-      - "127.0.0.1:8001:8000" # backend는 http://ai:8000 로 호출
+      - "127.0.0.1:8001:8000" # 호스트 8001 -> 컨테이너 8000. backend 는 http://ai:8000 으로 호출
     volumes:
       - audio_data:/uploads/audio # backend와 같은 볼륨을 같은 경로에 마운트
       - hf_models:/models
