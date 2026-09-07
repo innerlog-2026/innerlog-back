@@ -58,7 +58,7 @@ def seed(num_apps: int, base_url: str) -> None:
                 company_name="테스트회사",
                 position="백엔드 개발자",
                 stage=StageEnum.FIRST_INTERVIEW,
-                status=ApplicationStatusEnum.PREPARING,  # (FIRST_INTERVIEW, PREPARING) ∈ ALLOWED_STAGES
+                status=ApplicationStatusEnum.IN_PROGRESS,  # (FIRST_INTERVIEW, IN_PROGRESS) ∈ ALLOWED_STAGES
             )
             db.add(application)
             db.flush()

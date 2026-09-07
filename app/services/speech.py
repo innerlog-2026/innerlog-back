@@ -19,10 +19,12 @@ from app.core.exceptions import (
 )
 from app.models.application import (
     Application,
+    ApplicationStage,
     ApplicationStatusEnum,
     PersonalStatement,
     Question,
     StageEnum,
+    StageStatusEnum,
 )
 from app.models.submission import (
     InputTypeEnum,
@@ -33,15 +35,19 @@ from app.models.submission import (
 )
 from app.schemas.speech import SpeechPracticeCreateReq
 
-# 스피치 연습이 활성화되는 (전형 단계, 진행 상태) 조합
+# 스피치 연습이 활성화되는 (전형 단계, 진행 상태) 조합.
+# "자소서를 낸 뒤부터 최종 결과가 나오기 전까지" = 10칸 중 아래 2칸만 제외함.
+#   (서류전형, 진행중) — 자소서 미확정이라 예상 질문을 뽑을 원문이 없음
+#   (최종면접, 완료)   — 전형 종료라 대비할 면접이 없음
 ALLOWED_STAGES: set[tuple[StageEnum, ApplicationStatusEnum]] = {
     (StageEnum.DOCUMENT, ApplicationStatusEnum.COMPLETED),
-    (StageEnum.CODING_TEST, ApplicationStatusEnum.PREPARING),
+    (StageEnum.CODING_TEST, ApplicationStatusEnum.IN_PROGRESS),
     (StageEnum.CODING_TEST, ApplicationStatusEnum.COMPLETED),
-    (StageEnum.FIRST_INTERVIEW, ApplicationStatusEnum.PREPARING),
+    (StageEnum.FIRST_INTERVIEW, ApplicationStatusEnum.IN_PROGRESS),
     (StageEnum.FIRST_INTERVIEW, ApplicationStatusEnum.COMPLETED),
-    (StageEnum.SECOND_INTERVIEW, ApplicationStatusEnum.PREPARING),
-    (StageEnum.FINAL_INTERVIEW, ApplicationStatusEnum.PREPARING),
+    (StageEnum.SECOND_INTERVIEW, ApplicationStatusEnum.IN_PROGRESS),
+    (StageEnum.SECOND_INTERVIEW, ApplicationStatusEnum.COMPLETED),
+    (StageEnum.FINAL_INTERVIEW, ApplicationStatusEnum.IN_PROGRESS),
 }
 
 _AI_TIMEOUT_SECONDS = 90.0
@@ -118,13 +124,33 @@ def _get_owned_application(
     return application
 
 
+def _assert_speech_allowed(db: Session, application: Application) -> None:
+    """스피치 연습 게이팅: (단계, 상태) 조합 + 현재 단계 탈락 여부."""
+    if (application.stage, application.status) not in ALLOWED_STAGES:
+        raise SpeechPracticeNotAllowedError()
+
+    # 상태의 '완료'는 합격/탈락을 함께 접은 값이라 탈락 건도 조합 검사를 통과한다.
+    # 탈락이면 대비할 다음 면접이 없으므로 타임라인을 직접 확인해 닫는다.
+    if application.status is ApplicationStatusEnum.COMPLETED:
+        failed = (
+            db.query(ApplicationStage.application_stage_id)
+            .filter(
+                ApplicationStage.application_id == application.application_id,
+                ApplicationStage.stage == application.stage,
+                ApplicationStage.status == StageStatusEnum.FAIL,
+            )
+            .first()
+        )
+        if failed:
+            raise SpeechPracticeNotAllowedError()
+
+
 def create_speech_practice(
     db: Session, user_id: uuid.UUID, body: SpeechPracticeCreateReq
 ) -> tuple[uuid.UUID, list[Question]]:
     application = _get_owned_application(db, user_id, body.application_id)
 
-    if (application.stage, application.status) not in ALLOWED_STAGES:
-        raise SpeechPracticeNotAllowedError()
+    _assert_speech_allowed(db, application)
 
     already_exists = (
         db.query(Question.question_id)
@@ -198,8 +224,7 @@ def generate_more_questions(
     기존 질문과 텍스트가 완전히 일치하는 항목은 제외"""
     application = _get_owned_application(db, user_id, application_id)
 
-    if (application.stage, application.status) not in ALLOWED_STAGES:
-        raise SpeechPracticeNotAllowedError()
+    _assert_speech_allowed(db, application)
 
     statements = (
         db.query(PersonalStatement)
@@ -263,8 +288,7 @@ def _read_generate_inputs(
     → 커넥션 풀(15) 이 AI 대기 시간에 묶이지 않아 동시성 상한이 크게 오른다.
     """
     application = _get_owned_application(db, user_id, application_id)
-    if (application.stage, application.status) not in ALLOWED_STAGES:
-        raise SpeechPracticeNotAllowedError()
+    _assert_speech_allowed(db, application)
 
     statements = (
         db.query(PersonalStatement)
