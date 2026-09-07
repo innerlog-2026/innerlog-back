@@ -36,12 +36,12 @@ from app.schemas.speech import SpeechPracticeCreateReq
 # 스피치 연습이 활성화되는 (전형 단계, 진행 상태) 조합
 ALLOWED_STAGES: set[tuple[StageEnum, ApplicationStatusEnum]] = {
     (StageEnum.DOCUMENT, ApplicationStatusEnum.COMPLETED),
-    (StageEnum.CODING_TEST, ApplicationStatusEnum.PREPARING),
+    (StageEnum.CODING_TEST, ApplicationStatusEnum.IN_PROGRESS),
     (StageEnum.CODING_TEST, ApplicationStatusEnum.COMPLETED),
-    (StageEnum.FIRST_INTERVIEW, ApplicationStatusEnum.PREPARING),
+    (StageEnum.FIRST_INTERVIEW, ApplicationStatusEnum.IN_PROGRESS),
     (StageEnum.FIRST_INTERVIEW, ApplicationStatusEnum.COMPLETED),
-    (StageEnum.SECOND_INTERVIEW, ApplicationStatusEnum.PREPARING),
-    (StageEnum.FINAL_INTERVIEW, ApplicationStatusEnum.PREPARING),
+    (StageEnum.SECOND_INTERVIEW, ApplicationStatusEnum.IN_PROGRESS),
+    (StageEnum.FINAL_INTERVIEW, ApplicationStatusEnum.IN_PROGRESS),
 }
 
 _AI_TIMEOUT_SECONDS = 90.0
