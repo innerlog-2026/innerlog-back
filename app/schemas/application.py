@@ -22,7 +22,8 @@ class ApplicationCreateRequest(BaseModel):
     stage: Optional[StageEnum] = Field(None, description="전형 단계", examples=["서류전형"])
     date: Optional[date_type] = Field(None, description="지원 날짜", examples=["2026-04-15"])
     status: ApplicationStatusEnum = Field(
-        ApplicationStatusEnum.PREPARING, description="진행 상태 (PREPARING / IN_PROGRESS / COMPLETED)"
+        ApplicationStatusEnum.IN_PROGRESS,
+        description="전형 단계의 상태 (IN_PROGRESS = 결과 대기 / COMPLETED = 결과 나옴)",
     )
 
 
@@ -46,7 +47,9 @@ class ApplicationListItem(BaseModel):
     application_id: uuid.UUID = Field(..., description="지원 현황 ID")
     company_name: str = Field(..., description="기업명", examples=["토스 뱅크"])
     stage: Optional[StageEnum] = Field(None, description="전형 단계", examples=["서류전형"])
-    status: ApplicationStatusEnum = Field(..., description="현황 (PREPARING / IN_PROGRESS / COMPLETED)")
+    status: ApplicationStatusEnum = Field(
+        ..., description="해당 전형 단계의 상태 (IN_PROGRESS = 결과 대기 / COMPLETED = 합격 또는 탈락)"
+    )
 
 
 class ApplicationListResponse(BaseModel):

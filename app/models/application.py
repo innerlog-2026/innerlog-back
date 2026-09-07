@@ -18,7 +18,7 @@ class LevelEnum(str, enum.Enum):
 
 
 class ApplicationStatusEnum(str, enum.Enum):
-    PREPARING = "PREPARING"
+    # 지원 현황 진행 상태 (진행중 / 완료 2가지)
     IN_PROGRESS = "IN_PROGRESS"
     COMPLETED = "COMPLETED"
 
@@ -49,7 +49,7 @@ class Application(Base):
     date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     level: Mapped[Optional[LevelEnum]] = mapped_column(SAEnum(LevelEnum), nullable=True)
     memo: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    status: Mapped[ApplicationStatusEnum] = mapped_column(SAEnum(ApplicationStatusEnum), default=ApplicationStatusEnum.PREPARING, nullable=False)
+    status: Mapped[ApplicationStatusEnum] = mapped_column(SAEnum(ApplicationStatusEnum), default=ApplicationStatusEnum.IN_PROGRESS, nullable=False)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now(), nullable=False)
 

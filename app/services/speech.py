@@ -14,14 +14,17 @@ from app.core.exceptions import (
     InvalidAudioFileError,
     QuestionNotFoundError,
     SpeechPracticeAlreadyExistsError,
+    ResumeTooShortError,
     SpeechPracticeNotAllowedError,
 )
 from app.models.application import (
     Application,
+    ApplicationStage,
     ApplicationStatusEnum,
     PersonalStatement,
     Question,
     StageEnum,
+    StageStatusEnum,
 )
 from app.models.submission import (
     InputTypeEnum,
@@ -32,20 +35,27 @@ from app.models.submission import (
 )
 from app.schemas.speech import SpeechPracticeCreateReq
 
-# 스피치 연습이 활성화되는 (전형 단계, 진행 상태) 조합
+# 스피치 연습이 활성화되는 (전형 단계, 진행 상태) 조합.
+# "자소서를 낸 뒤부터 최종 결과가 나오기 전까지" = 10칸 중 아래 2칸만 제외함.
+#   (서류전형, 진행중) — 자소서 미확정이라 예상 질문을 뽑을 원문이 없음
+#   (최종면접, 완료)   — 전형 종료라 대비할 면접이 없음
 ALLOWED_STAGES: set[tuple[StageEnum, ApplicationStatusEnum]] = {
     (StageEnum.DOCUMENT, ApplicationStatusEnum.COMPLETED),
-    (StageEnum.CODING_TEST, ApplicationStatusEnum.PREPARING),
+    (StageEnum.CODING_TEST, ApplicationStatusEnum.IN_PROGRESS),
     (StageEnum.CODING_TEST, ApplicationStatusEnum.COMPLETED),
-    (StageEnum.FIRST_INTERVIEW, ApplicationStatusEnum.PREPARING),
+    (StageEnum.FIRST_INTERVIEW, ApplicationStatusEnum.IN_PROGRESS),
     (StageEnum.FIRST_INTERVIEW, ApplicationStatusEnum.COMPLETED),
-    (StageEnum.SECOND_INTERVIEW, ApplicationStatusEnum.PREPARING),
-    (StageEnum.FINAL_INTERVIEW, ApplicationStatusEnum.PREPARING),
+    (StageEnum.SECOND_INTERVIEW, ApplicationStatusEnum.IN_PROGRESS),
+    (StageEnum.SECOND_INTERVIEW, ApplicationStatusEnum.COMPLETED),
+    (StageEnum.FINAL_INTERVIEW, ApplicationStatusEnum.IN_PROGRESS),
 }
 
 _AI_TIMEOUT_SECONDS = 90.0
 # 스피치 분석은 오디오 전사 + 분석이라 질문 생성보다 더 오래 걸릴 수 있어 넉넉히 잡는다.
 _SPEECH_AI_TIMEOUT_SECONDS = 180.0
+# AI /question-extract 는 자소서가 이보다 짧으면 400 을 반환 (AI API v2)
+# 왕복을 돌기 전에 백엔드에서 먼저 걸러 명확한 에러를 반환함.
+_MIN_RESUME_LENGTH = 50
 _ALLOWED_AUDIO_EXTENSIONS = {".mp3", ".wav"}
 _MAX_AUDIO_BYTES = 100 * 1024 * 1024  # 100MB
 
@@ -89,6 +99,14 @@ async def _extract_questions_async(
     return data.get("questions", [])
 
 
+def _build_resume_text(statements) -> str:
+    """자소서 문항/내용을 AI 에 보낼 하나의 텍스트로 합치고 최소 길이를 검증함."""
+    resume_text = "\n\n".join(f"{item.question}\n{item.content}" for item in statements)
+    if len(resume_text.strip()) < _MIN_RESUME_LENGTH:
+        raise ResumeTooShortError()
+    return resume_text
+
+
 def _get_owned_application(
     db: Session, user_id: uuid.UUID, application_id: uuid.UUID
 ) -> Application:
@@ -106,13 +124,33 @@ def _get_owned_application(
     return application
 
 
+def _assert_speech_allowed(db: Session, application: Application) -> None:
+    """스피치 연습 게이팅: (단계, 상태) 조합 + 현재 단계 탈락 여부."""
+    if (application.stage, application.status) not in ALLOWED_STAGES:
+        raise SpeechPracticeNotAllowedError()
+
+    # 상태의 '완료'는 합격/탈락을 함께 접은 값이라 탈락 건도 조합 검사를 통과한다.
+    # 탈락이면 대비할 다음 면접이 없으므로 타임라인을 직접 확인해 닫는다.
+    if application.status is ApplicationStatusEnum.COMPLETED:
+        failed = (
+            db.query(ApplicationStage.application_stage_id)
+            .filter(
+                ApplicationStage.application_id == application.application_id,
+                ApplicationStage.stage == application.stage,
+                ApplicationStage.status == StageStatusEnum.FAIL,
+            )
+            .first()
+        )
+        if failed:
+            raise SpeechPracticeNotAllowedError()
+
+
 def create_speech_practice(
     db: Session, user_id: uuid.UUID, body: SpeechPracticeCreateReq
 ) -> tuple[uuid.UUID, list[Question]]:
     application = _get_owned_application(db, user_id, body.application_id)
 
-    if (application.stage, application.status) not in ALLOWED_STAGES:
-        raise SpeechPracticeNotAllowedError()
+    _assert_speech_allowed(db, application)
 
     already_exists = (
         db.query(Question.question_id)
@@ -132,16 +170,14 @@ def create_speech_practice(
             )
         )
 
-    resume_text = "\n\n".join(
-        f"{item.question}\n{item.content}" for item in body.personal_statements
-    )
+    resume_text = _build_resume_text(body.personal_statements)
 
     extracted = _extract_questions(body.company_name, body.position, resume_text)
 
     questions = [
         Question(
             application_id=application.application_id,
-            question=item.get("text", ""),
+            question=item.get("question", ""),
             category=item.get("category"),
             sequence=sequence,
         )
@@ -188,8 +224,7 @@ def generate_more_questions(
     기존 질문과 텍스트가 완전히 일치하는 항목은 제외"""
     application = _get_owned_application(db, user_id, application_id)
 
-    if (application.stage, application.status) not in ALLOWED_STAGES:
-        raise SpeechPracticeNotAllowedError()
+    _assert_speech_allowed(db, application)
 
     statements = (
         db.query(PersonalStatement)
@@ -197,7 +232,7 @@ def generate_more_questions(
         .order_by(PersonalStatement.sequence)
         .all()
     )
-    resume_text = "\n\n".join(f"{item.question}\n{item.content}" for item in statements)
+    resume_text = _build_resume_text(statements)
 
     extracted = _extract_questions(
         application.company_name, application.position, resume_text
@@ -220,7 +255,7 @@ def generate_more_questions(
     seen = set(existing_texts)
     sequence = max_sequence
     for item in extracted:
-        text = item.get("text", "")
+        text = item.get("question", "")
         if not text or text in seen:
             continue
         seen.add(text)
@@ -253,8 +288,7 @@ def _read_generate_inputs(
     → 커넥션 풀(15) 이 AI 대기 시간에 묶이지 않아 동시성 상한이 크게 오른다.
     """
     application = _get_owned_application(db, user_id, application_id)
-    if (application.stage, application.status) not in ALLOWED_STAGES:
-        raise SpeechPracticeNotAllowedError()
+    _assert_speech_allowed(db, application)
 
     statements = (
         db.query(PersonalStatement)
@@ -262,7 +296,7 @@ def _read_generate_inputs(
         .order_by(PersonalStatement.sequence)
         .all()
     )
-    resume_text = "\n\n".join(f"{item.question}\n{item.content}" for item in statements)
+    resume_text = _build_resume_text(statements)
     existing_texts = {
         text
         for (text,) in db.query(Question.question)
@@ -301,7 +335,7 @@ async def generate_more_questions_async(
     seen = set(existing_texts)
     sequence = max_sequence
     for item in extracted:
-        text = item.get("text", "")
+        text = item.get("question", "")
         if not text or text in seen:
             continue
         seen.add(text)
@@ -378,7 +412,7 @@ def _analyze_speech_ai(audio_file_path: str, question_text: str) -> dict:
             response = client.post(
                 f"{settings.AI_SERVER_URL}/speech-analyze",
                 json={
-                    "audio_file_path": audio_file_path,
+                    "audio_path": audio_file_path,
                     "question_text": question_text,
                 },
             )
@@ -417,12 +451,9 @@ def analyze_speech(
 
     acoustic = result.get("acoustic") or {}
     content = result.get("content") or {}
-    star_score = content.get("star_score") or {}
 
-    analysis = SpeechAnalysis(
-        submission_id=submission.submission_id,
-        feedback=result.get("feedback"),
-    )
+    # v2 에는 최상위 feedback 이 없음 (종합 피드백은 content.overall)
+    analysis = SpeechAnalysis(submission_id=submission.submission_id)
     db.add(analysis)
     db.flush()
 
@@ -440,13 +471,14 @@ def analyze_speech(
     db.add(
         SpeechContent(
             speech_analysis_id=analysis.speech_analysis_id,
-            star_situation=star_score.get("situation"),
-            star_task=star_score.get("task"),
-            star_action=star_score.get("action"),
-            star_result=star_score.get("result"),
+            question_type=content.get("question_type"),
+            # 행동형 질문이 아니면 star_score 는 null 로 온다.
+            # `or {}` 를 쓰면 빈 객체가 되어 CHECK 제약에 걸리므로 그대로 넘긴다.
+            star_score=content.get("star_score"),
             coherence=content.get("coherence"),
             keyword_repeat=content.get("keyword_repeat"),
             negative_reframe=content.get("negative_reframe"),
+            overall=content.get("overall"),
         )
     )
 

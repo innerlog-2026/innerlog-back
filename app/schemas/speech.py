@@ -65,11 +65,25 @@ class AcousticResult(BaseModel):
     word_count: Optional[int] = Field(None, description="어절 수")
 
 
+class StarItem(BaseModel):
+    """STAR 요소 1개 (AI v2: present + comment)."""
+
+    present: bool = False
+    comment: Optional[str] = None
+
+
 class StarScore(BaseModel):
-    situation: bool = False
-    task: bool = False
-    action: bool = False
-    result: bool = False
+    situation: StarItem = Field(default_factory=StarItem)
+    task: StarItem = Field(default_factory=StarItem)
+    action: StarItem = Field(default_factory=StarItem)
+    result: StarItem = Field(default_factory=StarItem)
+
+
+class Coherence(BaseModel):
+    """두서없음 판정 (AI v2: 객체)."""
+
+    summary: Optional[str] = Field(None, examples=["논리 흐름 양호"])
+    detail: Optional[str] = None
 
 
 class NegativeReframe(BaseModel):
@@ -79,30 +93,16 @@ class NegativeReframe(BaseModel):
 
 
 class ContentResult(BaseModel):
-    star_score: StarScore = Field(default_factory=StarScore)
-    coherence: Optional[str] = Field(None, examples=["논리 흐름 양호"])
-    keyword_repeat: dict[str, int] = Field(default_factory=dict)
+    question_type: Optional[str] = Field(
+        None, description="질문 유형 (행동형 / 의견형 / 기술형 / 가정형)", examples=["행동형"]
+    )
+    star_score: Optional[StarScore] = Field(
+        None, description="STAR 구조 분석. 행동형 질문이 아니면 null"
+    )
+    coherence: Coherence = Field(default_factory=Coherence)
+    keyword_repeat: dict[str, int] = Field(default_factory=dict, description="4회 이상 반복 키워드")
     negative_reframe: NegativeReframe = Field(default_factory=NegativeReframe)
-
-
-class StarDetailItem(BaseModel):
-    present: bool = False
-    excerpt: Optional[str] = None
-    comment: Optional[str] = None
-
-
-class StarDetail(BaseModel):
-    situation: StarDetailItem = Field(default_factory=StarDetailItem)
-    task: StarDetailItem = Field(default_factory=StarDetailItem)
-    action: StarDetailItem = Field(default_factory=StarDetailItem)
-    result: StarDetailItem = Field(default_factory=StarDetailItem)
-
-
-class FeedbackResult(BaseModel):
-    star_detail: StarDetail = Field(default_factory=StarDetail)
-    star_overall: Optional[str] = None
-    coherence_detail: Optional[str] = None
-    overall: Optional[str] = None
+    overall: Optional[str] = Field(None, description="종합 피드백")
 
 
 class SpeechAnalysisResponse(BaseModel):
@@ -110,4 +110,3 @@ class SpeechAnalysisResponse(BaseModel):
     question_id: uuid.UUID = Field(..., description="대상 질문 ID")
     acoustic: AcousticResult
     content: ContentResult
-    feedback: FeedbackResult
