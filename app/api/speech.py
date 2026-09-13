@@ -131,9 +131,17 @@ def analyze_speech_submission(
     submission, result = speech_service.analyze_speech(
         db, current_user.user_id, question_id, file, input_type
     )
+    feedback = result.get("feedback") or {}
+    content = result.get("content") or {}
+    # 과도기 호환: content.overall 은 deprecated 지만 프론트가 전환할 때까지
+    # feedback.overall 값을 복사해 채워준다.
+    if not content.get("overall"):
+        content["overall"] = feedback.get("overall")
+
     return SpeechAnalysisResponse(
         submission_id=submission.submission_id,
         question_id=question_id,
         acoustic=result.get("acoustic") or {},
-        content=result.get("content") or {},
+        content=content,
+        feedback=feedback,
     )

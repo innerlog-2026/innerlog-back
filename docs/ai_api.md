@@ -135,12 +135,15 @@
 
 ```json
 {
-  "audio_path": "/shared/audio/ckmk_a_ict_m_e_42650.wav",
+  "audio_file_path": "/shared/audio/ckmk_a_ict_m_e_42650.wav",
   "question_text": "팀 프로젝트에서 갈등을 해결한 경험이 있나요?"
 }
 ```
 
 > `question_text` 는 **선택**. 있으면 질문 유형(행동형/의견형/기술형/가정형)을 판별해 STAR 적용 여부를 결정한다.
+
+> ⚠️ 필드명은 **`audio_file_path`** 다. AI 서버의 `SpeechAnalyzeRequest` 가 이 이름을 **필수**로 받으므로,
+> `audio_path` 로 보내면 핸들러가 실행되기도 전에 Pydantic 이 **422** 를 내고 백엔드는 이를 **502** 로 감싼다.
 
 ### 응답
 
@@ -164,27 +167,42 @@
     },
     "coherence": { "summary": "논리 흐름 양호", "detail": null },
     "keyword_repeat": { "프로젝트": 4 },
-    "negative_reframe": { "detected": false, "expressions": [], "feedback": null },
+    "negative_reframe": { "detected": false, "expressions": [], "feedback": null }
+  },
+  "feedback": {
+    "star_overall": "상황과 행동은 잘 설명했지만, 본인의 역할과 결과를 더 구체적으로 말해보세요.",
+    "coherence_detail": null,
     "overall": "전반적으로 경험을 잘 구조화해서 설명했습니다."
   }
 }
 ```
 
-> `question_text` 가 없거나 행동형 질문이 아니면 **`star_score` 는 null** 로 온다.
+> **비행동형 질문(의견형/기술형/가정형)** 이면 `star_score` 의 4개 항목이 모두
+> `{"present": null, "comment": null}` 로 온다. **`star_score` 자체가 null 로 오지는 않는다.**
+> 이때 `feedback.star_overall` 도 null 이다. 프론트는 `content.question_type === "행동형"`
+> 일 때만 STAR UI 를 노출하고, 그 외에는 `feedback.overall` 만 보여준다.
 
-### v1 → v2 변경점
+### v1 → v2(최종) 변경점
 
-| 항목 | v1 | v2 |
+| 항목 | v1 | v2 (최종) |
 | --- | --- | --- |
-| 요청 오디오 경로 | `audio_file_path` | **`audio_path`** |
-| `star_score` | `{situation: true, …}` 단순 bool | **`{situation: {present, comment}, …}` 객체** (행동형만, 아니면 null) |
+| 요청 오디오 경로 | `audio_file_path` | **`audio_file_path` (변경 없음)** — v2 초안에 `audio_path` 로 적혀 있던 것은 오기 |
+| `star_score` | `{situation: true, …}` 단순 bool | **`{situation: {present, comment}, …}` 객체**. 항상 4개 키 존재, 비행동형이면 `present`/`comment` 가 null |
 | `coherence` | 문자열 | **`{summary, detail}` 객체** |
-| 최상위 `feedback` | 있음(star_detail/star_overall/…) | **제거** → 종합 피드백은 **`content.overall`** |
+| 최상위 `feedback` | `star_detail`/`star_overall`/… | **유지**. `star_detail` 만 제거(내용이 `star_score[*].comment` 로 흡수). 남는 필드는 `star_overall` / `coherence_detail` / `overall` |
+| 종합 피드백 위치 | `feedback.overall` | **`feedback.overall`** (v2 초안에서 `content.overall` 로 옮긴다고 했으나 최종본에서 원복) |
 | `content.question_type` | 없음 | **추가** (행동형/의견형/기술형/가정형) |
 | `speed_label` | 문장형 | 짧은 라벨 (`느린 편`/`적절`/`빠른 편`) |
 | `silence_count` | 침묵 구간 수 | **1.5초 이상** 침묵 횟수 |
 
-> **백엔드 저장:** `star_score`/`coherence` 는 JSONB 로 저장하며, CHECK 제약으로 최소 구조(4개 키 존재 + `present` 가 boolean)를 강제한다. 미지의 키는 허용해 명세 확장을 흡수한다. (`app/models/submission.py`)
+> **v2 초안 → 최종 정정 (2026-09-13):** 초안에는 "최상위 `feedback` 제거 → 종합 피드백은
+> `content.overall`", "행동형이 아니면 `star_score` 는 null" 로 적혀 있었다. AI 개발자
+> 최종본에서 둘 다 바뀌었으므로 위 표가 최신이다.
+
+> **백엔드 저장:** `star_score`/`coherence` 는 JSONB 로 저장하며, CHECK 제약으로 최소 구조
+> (4개 키 존재 + 각 항목이 `present` 를 가진 객체이고 `present` 가 **boolean 또는 null**)를 강제한다.
+> 미지의 키는 허용해 명세 확장을 흡수한다. (`app/models/submission.py`)
+> `feedback.star_overall` / `feedback.coherence_detail` 은 `speech_content` 의 동명 컬럼에 저장한다.
 
 ---
 

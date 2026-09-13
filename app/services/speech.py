@@ -437,7 +437,11 @@ def _analyze_speech_ai(audio_file_path: str, question_text: str) -> dict:
             response = client.post(
                 f"{settings.AI_SERVER_URL}/speech-analyze",
                 json={
-                    "audio_path": audio_file_path,
+                    # AI 서버(api/main.py) 의 SpeechAnalyzeRequest 가 필수로 받는 필드명.
+                    # v2 초안 문서에는 audio_path 로 적혀 있었으나 최종적으로
+                    # audio_file_path 를 유지하기로 정리됐다. 이름이 어긋나면
+                    # Pydantic 이 422 를 내고 백엔드는 502 로 감싼다.
+                    "audio_file_path": audio_file_path,
                     "question_text": question_text,
                 },
             )
@@ -491,8 +495,10 @@ def analyze_speech(
 
     acoustic = result.get("acoustic") or {}
     content = result.get("content") or {}
+    # AI v2 최종본은 최상위 feedback 을 유지한다 (제거된 것은 star_detail 뿐).
+    # 종합 피드백 overall 도 content 가 아니라 여기에 있으므로 feedback 을 먼저 읽는다.
+    feedback = result.get("feedback") or {}
 
-    # v2 에는 최상위 feedback 이 없음 (종합 피드백은 content.overall)
     analysis = SpeechAnalysis(submission_id=submission.submission_id)
     db.add(analysis)
     db.flush()
@@ -512,13 +518,17 @@ def analyze_speech(
         SpeechContent(
             speech_analysis_id=analysis.speech_analysis_id,
             question_type=content.get("question_type"),
-            # 행동형 질문이 아니면 star_score 는 null 로 온다.
+            # 비행동형이면 4개 항목이 {"present": null, "comment": null} 로 온다.
             # `or {}` 를 쓰면 빈 객체가 되어 CHECK 제약에 걸리므로 그대로 넘긴다.
             star_score=content.get("star_score"),
             coherence=content.get("coherence"),
             keyword_repeat=content.get("keyword_repeat"),
             negative_reframe=content.get("negative_reframe"),
-            overall=content.get("overall"),
+            # overall 은 최상위 feedback 에 있다. content.overall 은 v2 초안 형식이라
+            # 과도기 동안 fallback 으로만 둔다 (AI 가 완전히 전환되면 제거).
+            overall=feedback.get("overall") or content.get("overall"),
+            star_overall=feedback.get("star_overall"),
+            coherence_detail=feedback.get("coherence_detail"),
         )
     )
 
