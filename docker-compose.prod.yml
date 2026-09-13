@@ -36,9 +36,15 @@ services:
       - .env.ai
     ports:
       - "127.0.0.1:8001:8000" # 호스트 8001 -> 컨테이너 8000. backend 는 http://ai:8000 으로 호출
+    # GPU 머신(star_v2 서빙)의 ZeroTier 주소를 이름으로 매핑.
+    # .env.ai 의 STAR_LOCAL_API_URL=http://gpu-ai:8000/v1 이 이 이름을 참조한다.
+    # IP 리터럴을 앱 설정에 박지 않으려는 것 — 주소가 바뀌면 이 한 줄만 고친다.
+    # (ZeroTier Central 에서 Managed IP 를 고정해 두었으므로 평소엔 바뀌지 않는다)
+    extra_hosts:
+      - "gpu-ai:10.204.10.139"
     volumes:
       - audio_data:/uploads/audio # backend와 같은 볼륨을 같은 경로에 마운트
-      - hf_models:/models
+      - hf_models:/models # HF_HOME. faster-whisper/e5-large 캐시 — GPU 분리와 무관하게 EC2에 남음
     restart: unless-stopped
 
 volumes:
