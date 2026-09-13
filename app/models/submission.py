@@ -65,10 +65,22 @@ class SpeechContent(Base):
             "star_score IS NULL OR ("
             " jsonb_typeof(star_score) = 'object'"
             " AND jsonb_exists_all(star_score, ARRAY['situation','task','action','result'])"
-            " AND jsonb_typeof(star_score->'situation'->'present') = 'boolean'"
-            " AND jsonb_typeof(star_score->'task'->'present') = 'boolean'"
-            " AND jsonb_typeof(star_score->'action'->'present') = 'boolean'"
-            " AND jsonb_typeof(star_score->'result'->'present') = 'boolean'"
+            # 각 항목은 (1) 키 자체가 JSON null 이거나
+            #          (2) present 키를 가진 객체이고 present 가 boolean 또는 null
+            # 셋 중 하나여야 한다. 비행동형 질문에서 present 가 null 로 오므로
+            # boolean 만 허용하면 의견형 답변 저장이 제약 위반으로 실패한다.
+            " AND COALESCE(jsonb_typeof(star_score->'situation') = 'null'"
+            "          OR (jsonb_typeof(star_score->'situation') = 'object'"
+            "              AND jsonb_typeof(star_score->'situation'->'present') IN ('boolean','null')), false)"
+            " AND COALESCE(jsonb_typeof(star_score->'task') = 'null'"
+            "          OR (jsonb_typeof(star_score->'task') = 'object'"
+            "              AND jsonb_typeof(star_score->'task'->'present') IN ('boolean','null')), false)"
+            " AND COALESCE(jsonb_typeof(star_score->'action') = 'null'"
+            "          OR (jsonb_typeof(star_score->'action') = 'object'"
+            "              AND jsonb_typeof(star_score->'action'->'present') IN ('boolean','null')), false)"
+            " AND COALESCE(jsonb_typeof(star_score->'result') = 'null'"
+            "          OR (jsonb_typeof(star_score->'result') = 'object'"
+            "              AND jsonb_typeof(star_score->'result'->'present') IN ('boolean','null')), false)"
             ")",
             name="ck_speech_content_star_score",
         ),
@@ -85,8 +97,8 @@ class SpeechContent(Base):
     speech_analysis_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("speech_analysis.speech_analysis_id"), nullable=False)
     # AI v2: 질문 유형 (행동형 / 의견형 / 기술형 / 가정형)
     question_type: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    # AI v2: {situation|task|action|result: {present: bool, comment: str}}
-    #        행동형 질문이 아니면 전체가 NULL (STAR 미적용)
+    # AI v2 최종: {situation|task|action|result: {present: bool|null, comment: str|null}}
+    #             비행동형 질문이면 4개 항목의 present/comment 가 모두 null
     star_score: Mapped[Optional[dict]] = mapped_column(JSONB(none_as_null=True), nullable=True)
     # AI v2: {"summary": str, "detail": str|null}
     coherence: Mapped[Optional[dict]] = mapped_column(JSONB(none_as_null=True), nullable=True)
@@ -94,7 +106,12 @@ class SpeechContent(Base):
     keyword_repeat: Mapped[Optional[dict]] = mapped_column(JSONB(none_as_null=True), nullable=True)
     # AI v2: {"detected": bool, "expressions": [...], "feedback": str|null}
     negative_reframe: Mapped[Optional[dict]] = mapped_column(JSONB(none_as_null=True), nullable=True)
-    # AI v2: 종합 피드백 (v1 의 최상위 feedback.overall 이 content 로 이동)
+    # AI v2 최종: 종합 피드백. 최상위 feedback.overall 에서 가져온다
+    # (v2 초안은 content.overall 로 옮긴다고 했으나 최종본에서 feedback 이 유지됐다)
     overall: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # AI v2 최종: 최상위 feedback.star_overall — STAR 전체 종합 피드백. 비행동형이면 null
+    star_overall: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # AI v2 최종: 최상위 feedback.coherence_detail — 두서없음 상세 설명
+    coherence_detail: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     speech_analysis: Mapped["SpeechAnalysis"] = relationship("SpeechAnalysis", back_populates="speech_content")

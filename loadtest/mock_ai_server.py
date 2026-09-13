@@ -14,7 +14,7 @@
 import asyncio
 import os
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 
 AI_DELAY_SECONDS = float(os.getenv("AI_DELAY_SECONDS", "2.0"))
 
@@ -42,8 +42,41 @@ async def question_extract(payload: dict):
 
 @app.post("/speech-analyze")
 async def speech_analyze(payload: dict):
-    """AI API v2 응답 구조 (star_score 객체화 / coherence 객체 / content.overall)."""
+    """AI API v2 최종 응답 구조.
+
+    최종본 기준: star_score 는 항상 4개 키를 가진 객체이고, 비행동형이면
+    각 항목이 {"present": null, "comment": null} 이다. 최상위 feedback 은 유지되며
+    star_detail 만 제거됐다 (종합 피드백 overall 도 feedback 안에 있다).
+    """
+    # 실제 AI 서버의 SpeechAnalyzeRequest 는 audio_file_path 를 필수로 받는다.
+    # 목에서도 똑같이 막아 두어야 필드명이 다시 어긋났을 때 부하테스트에서 바로 드러난다.
+    if "audio_file_path" not in payload:
+        raise HTTPException(status_code=422, detail="field required: audio_file_path")
+
     await asyncio.sleep(AI_DELAY_SECONDS)
+    question_text = payload.get("question_text") or ""
+    # 행동형만 STAR 를 채우고, 그 외에는 present/comment 를 null 로 반환함.
+    is_behavioral = "경험" in question_text
+
+    if is_behavioral:
+        question_type = "행동형"
+        star_score = {
+            "situation": {"present": True, "comment": "배경 상황이 구체적으로 설명됐습니다."},
+            "task": {"present": False, "comment": "본인의 역할이 명확히 드러나지 않았습니다."},
+            "action": {"present": True, "comment": "구체적인 행동이 잘 서술됐습니다."},
+            "result": {"present": True, "comment": "결과가 명확히 제시됐습니다."},
+        }
+        star_overall = "상황과 행동은 잘 설명했지만, 본인의 역할과 결과를 더 구체적으로 말해보세요."
+    else:
+        question_type = "의견형"
+        star_score = {
+            "situation": {"present": None, "comment": None},
+            "task": {"present": None, "comment": None},
+            "action": {"present": None, "comment": None},
+            "result": {"present": None, "comment": None},
+        }
+        star_overall = None
+
     return {
         "acoustic": {
             "speed_wpm": 87.5,
@@ -54,16 +87,15 @@ async def speech_analyze(payload: dict):
             "word_count": 90,
         },
         "content": {
-            "question_type": "행동형",
-            "star_score": {
-                "situation": {"present": True, "comment": "배경 상황이 구체적으로 설명됐습니다."},
-                "task": {"present": False, "comment": "본인의 역할이 명확히 드러나지 않았습니다."},
-                "action": {"present": True, "comment": "구체적인 행동이 잘 서술됐습니다."},
-                "result": {"present": True, "comment": "결과가 명확히 제시됐습니다."},
-            },
+            "question_type": question_type,
+            "star_score": star_score,
             "coherence": {"summary": "논리 흐름 양호", "detail": None},
             "keyword_repeat": {"프로젝트": 4},
             "negative_reframe": {"detected": False, "expressions": [], "feedback": None},
+        },
+        "feedback": {
+            "star_overall": star_overall,
+            "coherence_detail": None,
             "overall": "전반적으로 경험을 잘 구조화해서 설명했습니다.",
         },
     }

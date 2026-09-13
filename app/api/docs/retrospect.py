@@ -1,6 +1,8 @@
 from app.api.docs.responses import error_response
 from app.core.exceptions import (
     AIServerError,
+    AIServerTimeoutError,
+    AIServerUnreachableError,
     ApplicationNotFoundError,
     InvalidTokenError,
     RetrospectAlreadyDoneError,
@@ -32,6 +34,12 @@ _retrospect_not_done_response = error_response(
     "회고 대화가 아직 DONE 단계가 아님", RetrospectNotDoneError
 )
 _ai_server_error_response = error_response("AI 서버 호출 실패", AIServerError)
+_ai_server_unreachable_response = error_response(
+    "AI 서버 연결 실패 (서버 다운 / 네트워크 경로 단절)", AIServerUnreachableError
+)
+_ai_server_timeout_response = error_response(
+    "AI 서버 응답 지연 (제한 시간 초과)", AIServerTimeoutError
+)
 
 start_retrospect_docs = dict(
     summary="면접 회고 시작",
@@ -47,6 +55,8 @@ start_retrospect_docs = dict(
         404: _application_not_found_response,
         409: _retrospect_already_exists_response,
         502: _ai_server_error_response,
+        503: _ai_server_unreachable_response,
+        504: _ai_server_timeout_response,
     },
 )
 
@@ -63,6 +73,8 @@ chat_retrospect_docs = dict(
         404: _session_not_found_response,
         409: _chat_conflict_response,
         502: _ai_server_error_response,
+        503: _ai_server_unreachable_response,
+        504: _ai_server_timeout_response,
     },
 )
 
@@ -79,6 +91,8 @@ summarize_retrospect_docs = dict(
         404: _session_not_found_response,
         409: _retrospect_not_done_response,
         502: _ai_server_error_response,
+        503: _ai_server_unreachable_response,
+        504: _ai_server_timeout_response,
     },
 )
 

@@ -66,17 +66,23 @@ class AcousticResult(BaseModel):
 
 
 class StarItem(BaseModel):
-    """STAR 요소 1개 (AI v2: present + comment)."""
+    """STAR 요소 1개 (AI v2 최종: present + comment).
 
-    present: bool = False
+    비행동형 질문에서는 4개 항목이 모두 {"present": null, "comment": null} 로 온다.
+    따라서 present 를 bool 로 못박으면 의견형 응답에서 ValidationError 가 난다.
+    """
+
+    present: Optional[bool] = None
     comment: Optional[str] = None
 
 
 class StarScore(BaseModel):
-    situation: StarItem = Field(default_factory=StarItem)
-    task: StarItem = Field(default_factory=StarItem)
-    action: StarItem = Field(default_factory=StarItem)
-    result: StarItem = Field(default_factory=StarItem)
+    # AI v2 최종: 4개 키는 항상 존재하고, 비행동형이면 각 항목의 present/comment 가 null.
+    # (구버전 명세처럼 키 자체가 null 로 오는 경우도 흡수하기 위해 Optional 을 유지한다.)
+    situation: Optional[StarItem] = None
+    task: Optional[StarItem] = None
+    action: Optional[StarItem] = None
+    result: Optional[StarItem] = None
 
 
 class Coherence(BaseModel):
@@ -97,12 +103,34 @@ class ContentResult(BaseModel):
         None, description="질문 유형 (행동형 / 의견형 / 기술형 / 가정형)", examples=["행동형"]
     )
     star_score: Optional[StarScore] = Field(
-        None, description="STAR 구조 분석. 행동형 질문이 아니면 null"
+        None,
+        description="STAR 구조 분석. 비행동형 질문이면 4개 항목이 모두 "
+        '{"present": null, "comment": null} 로 온다',
     )
     coherence: Coherence = Field(default_factory=Coherence)
     keyword_repeat: dict[str, int] = Field(default_factory=dict, description="4회 이상 반복 키워드")
     negative_reframe: NegativeReframe = Field(default_factory=NegativeReframe)
-    overall: Optional[str] = Field(None, description="종합 피드백")
+    overall: Optional[str] = Field(
+        None,
+        deprecated=True,
+        description="[deprecated] 종합 피드백. AI v2 최종본에서 feedback.overall 로 옮겨갔다. "
+        "프론트 전환 기간 동안만 feedback.overall 값을 그대로 복사해 채워준다.",
+    )
+
+
+class FeedbackResult(BaseModel):
+    """AI v2 최종본의 최상위 feedback.
+
+    v2 초안에서는 이 블록이 통째로 사라지고 종합 피드백이 content.overall 로 간다고
+    되어 있었으나, 최종본에서는 feedback 이 남고 star_detail 만 제거됐다.
+    (star_detail 의 내용은 star_score 각 항목의 comment 로 흡수)
+    """
+
+    star_overall: Optional[str] = Field(
+        None, description="STAR 전체에 대한 종합 피드백. 비행동형 질문이면 null"
+    )
+    coherence_detail: Optional[str] = Field(None, description="두서없음 상세 설명")
+    overall: Optional[str] = Field(None, description="종합 피드백 텍스트")
 
 
 class SpeechAnalysisResponse(BaseModel):
@@ -110,3 +138,4 @@ class SpeechAnalysisResponse(BaseModel):
     question_id: uuid.UUID = Field(..., description="대상 질문 ID")
     acoustic: AcousticResult
     content: ContentResult
+    feedback: FeedbackResult = Field(default_factory=FeedbackResult)

@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.exceptions import (
     AIServerError,
+    AIServerTimeoutError,
+    AIServerUnreachableError,
     ApplicationNotFoundError,
     RetrospectAlreadyDoneError,
     RetrospectAlreadyExistsError,
@@ -39,8 +41,11 @@ _STAGE_TO_TYPE: dict[StageEnum, SessionTypeEnum] = {
     StageEnum.FINAL_INTERVIEW: SessionTypeEnum.FINAL,
 }
 
-# AI /chat·/summarize 모두 LLM 호출이라 넉넉히 잡는다.
-_AI_TIMEOUT_SECONDS = 90.0
+# AI /chat·/summarize 모두 LLM 호출이라 read 는 넉넉히 잡는다.
+# connect 만 따로 5초로 떼어놓는 이유: 단일 숫자로 주면 connect 에도 같은 90초가 적용되어,
+# AI 서버가 내려갔을 때 TCP 연결 시도만으로 90초를 기다린 뒤에야 에러가 나간다.
+# "연결이 되는가"는 5초면 충분히 판단되고, "추론이 오래 걸리는가"와는 성격이 다른 대기다.
+_AI_TIMEOUT = httpx.Timeout(connect=5.0, read=90.0, write=30.0, pool=5.0)
 
 
 def _get_owned_application(
@@ -92,7 +97,7 @@ def _chat_ai(session_id: uuid.UUID, user_message: str, state: dict) -> tuple[str
     백엔드는 state 내용을 해석하지 않고 그대로 넘기고, 응답의 updated_state를 그대로 저장한다.
     """
     try:
-        with httpx.Client(timeout=_AI_TIMEOUT_SECONDS) as client:
+        with httpx.Client(timeout=_AI_TIMEOUT) as client:
             response = client.post(
                 f"{settings.AI_SERVER_URL}/chat",
                 json={
@@ -112,8 +117,16 @@ def _chat_ai(session_id: uuid.UUID, user_message: str, state: dict) -> tuple[str
             exc.response.text[:500],
         )
         raise AIServerError()
+    except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+        # AI 서버가 떠 있지 않거나 네트워크 경로가 끊김 — 요청이 처리되지 않았음이 확실하다.
+        logger.error("AI /chat 연결 실패: %r", exc)
+        raise AIServerUnreachableError()
+    except httpx.TimeoutException as exc:
+        # 연결은 됐는데 read 제한 시간 안에 응답이 안 옴 (AI 쪽에서 아직 돌고 있을 수 있음).
+        logger.error("AI /chat 응답 지연: %r", exc)
+        raise AIServerTimeoutError()
     except (httpx.HTTPError, ValueError, KeyError) as exc:
-        # 연결 실패/타임아웃/JSON 파싱 실패/응답 키 누락 등
+        # 그 외 전송 오류 / JSON 파싱 실패 / 응답 키 누락 등
         logger.error("AI /chat 호출 실패: %r", exc)
         raise AIServerError()
 
@@ -121,7 +134,7 @@ def _chat_ai(session_id: uuid.UUID, user_message: str, state: dict) -> tuple[str
 def _summarize_ai(session_id: uuid.UUID, history: list) -> dict:
     """AI 서버의 POST /summarize를 호출해 회고 분석 결과를 받아온다."""
     try:
-        with httpx.Client(timeout=_AI_TIMEOUT_SECONDS) as client:
+        with httpx.Client(timeout=_AI_TIMEOUT) as client:
             response = client.post(
                 f"{settings.AI_SERVER_URL}/summarize",
                 json={"session_id": str(session_id), "history": history},
@@ -135,6 +148,12 @@ def _summarize_ai(session_id: uuid.UUID, history: list) -> dict:
             exc.response.text[:500],
         )
         raise AIServerError()
+    except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+        logger.error("AI /summarize 연결 실패: %r", exc)
+        raise AIServerUnreachableError()
+    except httpx.TimeoutException as exc:
+        logger.error("AI /summarize 응답 지연: %r", exc)
+        raise AIServerTimeoutError()
     except (httpx.HTTPError, ValueError) as exc:
         logger.error("AI /summarize 호출 실패: %r", exc)
         raise AIServerError()
