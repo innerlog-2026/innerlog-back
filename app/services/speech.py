@@ -1,3 +1,4 @@
+import logging
 import os
 import uuid
 
@@ -9,6 +10,8 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.exceptions import (
     AIServerError,
+    AIServerTimeoutError,
+    AIServerUnreachableError,
     ApplicationNotFoundError,
     AudioFileTooLargeError,
     InvalidAudioFileError,
@@ -50,9 +53,17 @@ ALLOWED_STAGES: set[tuple[StageEnum, ApplicationStatusEnum]] = {
     (StageEnum.FINAL_INTERVIEW, ApplicationStatusEnum.IN_PROGRESS),
 }
 
-_AI_TIMEOUT_SECONDS = 90.0
-# 스피치 분석은 오디오 전사 + 분석이라 질문 생성보다 더 오래 걸릴 수 있어 넉넉히 잡는다.
-_SPEECH_AI_TIMEOUT_SECONDS = 180.0
+logger = logging.getLogger(__name__)
+
+# connect 만 5초로 떼어놓는다. 단일 숫자로 주면 connect 에도 read 와 같은 값이 적용되어,
+# AI 서버가 내려갔을 때 TCP 연결 시도만으로 90초(스피치는 180초)를 기다린 뒤에야 에러가 나간다.
+_AI_TIMEOUT = httpx.Timeout(connect=5.0, read=90.0, write=30.0, pool=5.0)
+# 스피치 분석은 STT + 음향 분석 + STAR 분석이 이어져 질문 생성보다 오래 걸린다.
+# 2026-09-13 EC2 end-to-end 실측 (86.2초 오디오): 총 110.4초
+#   = STT 86.5초(EC2 CPU) + 음향 1초 + GPU STAR 23초.  180초 대비 39% 여유.
+# 답변 길이 상한은 AI 서버의 STT_MAX_DURATION_SEC(120초)가 담당한다 — 그 이상은
+# 디코딩 전에 거절되므로 이 타임아웃까지 도달하지 않는다.
+_SPEECH_AI_TIMEOUT = httpx.Timeout(connect=5.0, read=180.0, write=30.0, pool=5.0)
 # AI /question-extract 는 자소서가 이보다 짧으면 400 을 반환 (AI API v2)
 # 왕복을 돌기 전에 백엔드에서 먼저 걸러 명확한 에러를 반환함.
 _MIN_RESUME_LENGTH = 50
@@ -63,14 +74,21 @@ _MAX_AUDIO_BYTES = 100 * 1024 * 1024  # 100MB
 def _extract_questions(company: str, role: str, resume_text: str) -> list[dict]:
     """AI 서버의 POST /question-extract를 호출해 예상 질문 목록을 받아온다."""
     try:
-        with httpx.Client(timeout=_AI_TIMEOUT_SECONDS) as client:
+        with httpx.Client(timeout=_AI_TIMEOUT) as client:
             response = client.post(
                 f"{settings.AI_SERVER_URL}/question-extract",
                 json={"company": company, "role": role, "resume_text": resume_text},
             )
             response.raise_for_status()
             data = response.json()
-    except (httpx.HTTPError, ValueError):
+    except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+        logger.error("AI /question-extract 연결 실패: %r", exc)
+        raise AIServerUnreachableError()
+    except httpx.TimeoutException as exc:
+        logger.error("AI /question-extract 응답 지연: %r", exc)
+        raise AIServerTimeoutError()
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.error("AI /question-extract 호출 실패: %r", exc)
         raise AIServerError()
 
     return data.get("questions", [])
@@ -86,14 +104,21 @@ async def _extract_questions_async(
     수많은 in-flight AI 호출을 동시에 흘려보낼 수 있다.
     """
     try:
-        async with httpx.AsyncClient(timeout=_AI_TIMEOUT_SECONDS) as client:
+        async with httpx.AsyncClient(timeout=_AI_TIMEOUT) as client:
             response = await client.post(
                 f"{settings.AI_SERVER_URL}/question-extract",
                 json={"company": company, "role": role, "resume_text": resume_text},
             )
             response.raise_for_status()
             data = response.json()
-    except (httpx.HTTPError, ValueError):
+    except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+        logger.error("AI /question-extract(async) 연결 실패: %r", exc)
+        raise AIServerUnreachableError()
+    except httpx.TimeoutException as exc:
+        logger.error("AI /question-extract(async) 응답 지연: %r", exc)
+        raise AIServerTimeoutError()
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.error("AI /question-extract(async) 호출 실패: %r", exc)
         raise AIServerError()
 
     return data.get("questions", [])
@@ -408,17 +433,36 @@ def _save_audio_file(upload: UploadFile, file_stem: str) -> str:
 def _analyze_speech_ai(audio_file_path: str, question_text: str) -> dict:
     """AI 서버의 POST /speech-analyze를 호출해 스피치 분석 결과를 받아온다."""
     try:
-        with httpx.Client(timeout=_SPEECH_AI_TIMEOUT_SECONDS) as client:
+        with httpx.Client(timeout=_SPEECH_AI_TIMEOUT) as client:
             response = client.post(
                 f"{settings.AI_SERVER_URL}/speech-analyze",
                 json={
-                    "audio_path": audio_file_path,
+                    # AI 서버(api/main.py) 의 SpeechAnalyzeRequest 가 필수로 받는 필드명.
+                    # v2 초안 문서에는 audio_path 로 적혀 있었으나 최종적으로
+                    # audio_file_path 를 유지하기로 정리됐다. 이름이 어긋나면
+                    # Pydantic 이 422 를 내고 백엔드는 502 로 감싼다.
+                    "audio_file_path": audio_file_path,
                     "question_text": question_text,
                 },
             )
             response.raise_for_status()
             return response.json()
-    except (httpx.HTTPError, ValueError):
+    except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+        logger.error("AI /speech-analyze 연결 실패: %r", exc)
+        raise AIServerUnreachableError()
+    except httpx.TimeoutException as exc:
+        logger.error("AI /speech-analyze 응답 지연: %r", exc)
+        raise AIServerTimeoutError()
+    except httpx.HTTPStatusError as exc:
+        # AI 서버가 4xx/5xx 를 준 경우 본문을 남긴다 (502 뒤에 원인이 가려지지 않도록).
+        logger.error(
+            "AI /speech-analyze 실패: status=%s body=%s",
+            exc.response.status_code,
+            exc.response.text[:500],
+        )
+        raise AIServerError()
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.error("AI /speech-analyze 호출 실패: %r", exc)
         raise AIServerError()
 
 
@@ -451,8 +495,10 @@ def analyze_speech(
 
     acoustic = result.get("acoustic") or {}
     content = result.get("content") or {}
+    # AI v2 최종본은 최상위 feedback 을 유지한다 (제거된 것은 star_detail 뿐).
+    # 종합 피드백 overall 도 content 가 아니라 여기에 있으므로 feedback 을 먼저 읽는다.
+    feedback = result.get("feedback") or {}
 
-    # v2 에는 최상위 feedback 이 없음 (종합 피드백은 content.overall)
     analysis = SpeechAnalysis(submission_id=submission.submission_id)
     db.add(analysis)
     db.flush()
@@ -472,13 +518,17 @@ def analyze_speech(
         SpeechContent(
             speech_analysis_id=analysis.speech_analysis_id,
             question_type=content.get("question_type"),
-            # 행동형 질문이 아니면 star_score 는 null 로 온다.
+            # 비행동형이면 4개 항목이 {"present": null, "comment": null} 로 온다.
             # `or {}` 를 쓰면 빈 객체가 되어 CHECK 제약에 걸리므로 그대로 넘긴다.
             star_score=content.get("star_score"),
             coherence=content.get("coherence"),
             keyword_repeat=content.get("keyword_repeat"),
             negative_reframe=content.get("negative_reframe"),
-            overall=content.get("overall"),
+            # overall 은 최상위 feedback 에 있다. content.overall 은 v2 초안 형식이라
+            # 과도기 동안 fallback 으로만 둔다 (AI 가 완전히 전환되면 제거).
+            overall=feedback.get("overall") or content.get("overall"),
+            star_overall=feedback.get("star_overall"),
+            coherence_detail=feedback.get("coherence_detail"),
         )
     )
 
