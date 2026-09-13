@@ -1,6 +1,8 @@
 from app.api.docs.responses import error_response
 from app.core.exceptions import (
     AIServerError,
+    AIServerTimeoutError,
+    AIServerUnreachableError,
     ApplicationNotFoundError,
     AudioFileTooLargeError,
     InvalidAudioFileError,
@@ -17,6 +19,12 @@ _speech_not_allowed_response = error_response(
     "스피치 연습을 사용할 수 없는 전형 단계", SpeechPracticeNotAllowedError
 )
 _ai_server_error_response = error_response("AI 서버 호출 실패", AIServerError)
+_ai_server_unreachable_response = error_response(
+    "AI 서버 연결 실패 (서버 다운 / 네트워크 경로 단절)", AIServerUnreachableError
+)
+_ai_server_timeout_response = error_response(
+    "AI 서버 응답 지연 (제한 시간 초과)", AIServerTimeoutError
+)
 _speech_already_exists_response = error_response(
     "이미 스피치 연습이 생성됨", SpeechPracticeAlreadyExistsError
 )
@@ -48,6 +56,8 @@ generate_speech_practice_questions_docs = dict(
         403: _speech_not_allowed_response,
         404: _application_not_found_response,
         502: _ai_server_error_response,
+        503: _ai_server_unreachable_response,
+        504: _ai_server_timeout_response,
     },
 )
 
@@ -62,6 +72,8 @@ create_speech_practice_docs = dict(
         404: _application_not_found_response,
         409: _speech_already_exists_response,
         502: _ai_server_error_response,
+        503: _ai_server_unreachable_response,
+        504: _ai_server_timeout_response,
     },
 )
 
@@ -79,5 +91,7 @@ analyze_speech_docs = dict(
         404: _question_not_found_response,
         413: _audio_too_large_response,
         502: _ai_server_error_response,
+        503: _ai_server_unreachable_response,
+        504: _ai_server_timeout_response,
     },
 )

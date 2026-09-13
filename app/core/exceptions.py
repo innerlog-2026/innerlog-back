@@ -104,5 +104,45 @@ class RetrospectAlreadyDoneError(InnerLogException):
 
 
 class AIServerError(InnerLogException):
+    """AI 서버 호출 실패의 기본형.
+
+    세부 원인(연결 불가 / 응답 지연)은 아래 하위 클래스로 구분한다. 하위 클래스가
+    이 클래스를 상속하므로 기존의 `except AIServerError:` 는 세 경우를 모두 잡는다.
+    """
+
+    def __init__(
+        self,
+        status_code: int = 502,
+        code: str = "AI_SERVER_ERROR",
+        message: str = "AI 서버 호출에 실패했습니다.",
+    ):
+        super().__init__(status_code, code, message)
+
+
+class AIServerUnreachableError(AIServerError):
+    """연결 자체가 성립하지 않은 경우.
+
+    AI 서버가 내려갔거나, /speech-analyze·/summarize 가 의존하는 GPU 머신으로 가는
+    네트워크 경로가 끊긴 상황이다. 요청이 처리되지 않았음이 확실하므로 재시도해도 안전하다.
+    """
+
     def __init__(self):
-        super().__init__(502, "AI_SERVER_ERROR", "AI 서버 호출에 실패했습니다.")
+        super().__init__(
+            503,
+            "AI_SERVER_503",
+            "AI 서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.",
+        )
+
+
+class AIServerTimeoutError(AIServerError):
+    """연결은 됐으나 제한 시간 안에 응답이 오지 않은 경우.
+
+    AI 쪽에서 추론이 아직 돌고 있을 수 있어, 자동 재시도는 같은 작업을 두 번 태울 위험이 있다.
+    """
+
+    def __init__(self):
+        super().__init__(
+            504,
+            "AI_SERVER_504",
+            "AI 서버 응답이 지연되고 있습니다. 잠시 후 다시 시도해주세요.",
+        )
