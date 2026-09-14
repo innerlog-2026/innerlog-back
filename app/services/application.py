@@ -12,6 +12,7 @@ from app.models.application import (
 )
 from app.models.session import Session as SessionModel, SessionStatusEnum, SessionTypeEnum
 from app.schemas.application import ApplicationCreateRequest, TimelineStatusEnum
+from app.services.speech import is_speech_practice_available, is_speech_practice_created
 
 PAGE_SIZE = 5
 
@@ -153,7 +154,7 @@ def update_stage_result(
 
 
 def get_application_detail(db: Session, user_id: uuid.UUID, application_id: uuid.UUID):
-    # 상세 + 타임라인(고정 파이프라인) + 1·2차 회고 완료 여부
+    # 상세 + 타임라인(고정 파이프라인) + 1·2차 회고 완료 여부 + 스피치 연습 생성/활성 여부
     application = _get_owned_application(db, user_id, application_id)
 
     stage_rows = (
@@ -186,4 +187,15 @@ def get_application_detail(db: Session, user_id: uuid.UUID, application_id: uuid
     first_done = SessionTypeEnum.FIRST in completed_types
     second_done = SessionTypeEnum.SECOND in completed_types
 
-    return application, timeline, current_status, first_done, second_done
+    speech_created = is_speech_practice_created(db, application)
+    speech_available = is_speech_practice_available(db, application)
+
+    return (
+        application,
+        timeline,
+        current_status,
+        first_done,
+        second_done,
+        speech_created,
+        speech_available,
+    )

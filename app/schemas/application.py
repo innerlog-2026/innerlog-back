@@ -94,6 +94,12 @@ class ApplicationDetailResponse(BaseModel):
     )
     first_interview_retrospect_completed: bool = Field(..., description="1차 면접 회고 완료 여부")
     second_interview_retrospect_completed: bool = Field(..., description="2차 면접 회고 완료 여부")
+    speech_practice_created: bool = Field(
+        ..., description="스피치 연습 최초 생성 여부 (POST /speech-practices 로 예상 질문이 저장된 적 있음)"
+    )
+    speech_practice_available: bool = Field(
+        ..., description="현재 전형 단계·상태에서 스피치 연습 기능 활성화 여부"
+    )
     timeline: list[TimelineStageItem] = Field(
         ..., description="전형 진행 단계 타임라인 (고정 파이프라인 전체, 순서대로). 미도달 단계는 대기"
     )

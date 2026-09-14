@@ -149,10 +149,10 @@ def _get_owned_application(
     return application
 
 
-def _assert_speech_allowed(db: Session, application: Application) -> None:
+def is_speech_practice_available(db: Session, application: Application) -> bool:
     """스피치 연습 게이팅: (단계, 상태) 조합 + 현재 단계 탈락 여부."""
     if (application.stage, application.status) not in ALLOWED_STAGES:
-        raise SpeechPracticeNotAllowedError()
+        return False
 
     # 상태의 '완료'는 합격/탈락을 함께 접은 값이라 탈락 건도 조합 검사를 통과한다.
     # 탈락이면 대비할 다음 면접이 없으므로 타임라인을 직접 확인해 닫는다.
@@ -167,7 +167,24 @@ def _assert_speech_allowed(db: Session, application: Application) -> None:
             .first()
         )
         if failed:
-            raise SpeechPracticeNotAllowedError()
+            return False
+
+    return True
+
+
+def is_speech_practice_created(db: Session, application: Application) -> bool:
+    """최초 스피치 연습 생성 여부: 해당 지원 현황에 저장된 질문이 하나라도 있으면 생성된 것으로 봄."""
+    return (
+        db.query(Question.question_id)
+        .filter(Question.application_id == application.application_id)
+        .first()
+        is not None
+    )
+
+
+def _assert_speech_allowed(db: Session, application: Application) -> None:
+    if not is_speech_practice_available(db, application):
+        raise SpeechPracticeNotAllowedError()
 
 
 def create_speech_practice(
@@ -177,12 +194,7 @@ def create_speech_practice(
 
     _assert_speech_allowed(db, application)
 
-    already_exists = (
-        db.query(Question.question_id)
-        .filter(Question.application_id == application.application_id)
-        .first()
-    )
-    if already_exists:
+    if is_speech_practice_created(db, application):
         raise SpeechPracticeAlreadyExistsError()
 
     for sequence, item in enumerate(body.personal_statements, start=1):

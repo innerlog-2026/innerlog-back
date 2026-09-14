@@ -61,9 +61,15 @@ def get_application_detail(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    application, timeline, current_status, first_done, second_done = (
-        application_service.get_application_detail(db, current_user.user_id, application_id)
-    )
+    (
+        application,
+        timeline,
+        current_status,
+        first_done,
+        second_done,
+        speech_created,
+        speech_available,
+    ) = application_service.get_application_detail(db, current_user.user_id, application_id)
     return ApplicationDetailResponse(
         application_id=application.application_id,
         company_name=application.company_name,
@@ -72,6 +78,8 @@ def get_application_detail(
         status=current_status,
         first_interview_retrospect_completed=first_done,
         second_interview_retrospect_completed=second_done,
+        speech_practice_created=speech_created,
+        speech_practice_available=speech_available,
         timeline=[TimelineStageItem(stage=stage, status=status) for stage, status in timeline],
     )
 
