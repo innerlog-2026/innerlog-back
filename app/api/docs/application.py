@@ -47,7 +47,8 @@ get_application_detail_docs = dict(
     description="지원 현황 상세 + 전형 진행 단계 타임라인을 조회한다. "
     "타임라인은 고정 파이프라인 전체를 순서대로 반환하며, 각 단계 상태는 대기/진행중/합격/탈락이다 "
     "(도달하지 않은 단계는 '대기'; 대기는 저장하지 않고 응답에서 파생). "
-    "현재 전형 단계의 상태와 1·2차 면접 회고 완료 여부(회고 세션 COMPLETED)도 포함한다. "
+    "현재 전형 단계의 상태와 1차·2차·최종 면접 회고의 활성화(available: 현재 단계가 해당 면접 이상) / "
+    "시작(created: 회고 세션 존재) / 완료(completed: 회고 세션 COMPLETED) 여부도 포함한다. "
     "speech_practice_created 는 예상 질문이 한 번이라도 저장됐는지(POST /speech-practices 호출 여부), "
     "speech_practice_available 은 현재 단계·상태에서 스피치 연습이 허용되는지(스피치 API 게이팅과 동일 기준)를 나타낸다.",
     responses={

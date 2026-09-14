@@ -1,4 +1,5 @@
 import uuid
+from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
@@ -12,9 +13,17 @@ from app.models.application import (
 )
 from app.models.session import Session as SessionModel, SessionStatusEnum, SessionTypeEnum
 from app.schemas.application import ApplicationCreateRequest, TimelineStatusEnum
+from app.services.retrospect import available_retrospect_types
 from app.services.speech import is_speech_practice_available, is_speech_practice_created
 
 PAGE_SIZE = 5
+
+
+@dataclass
+class RetrospectFlags:
+    available: bool  # 현재 전형 단계에서 회고 시작 허용
+    created: bool  # 회고 세션 존재 (대화 중 포함)
+    completed: bool  # 회고 세션 COMPLETED (요약 완료)
 
 
 def _get_owned_application(db: Session, user_id: uuid.UUID, application_id: uuid.UUID) -> Application:
@@ -154,7 +163,7 @@ def update_stage_result(
 
 
 def get_application_detail(db: Session, user_id: uuid.UUID, application_id: uuid.UUID):
-    # 상세 + 타임라인(고정 파이프라인) + 1·2차 회고 완료 여부 + 스피치 연습 생성/활성 여부
+    # 상세 + 타임라인(고정 파이프라인) + 면접 회고 활성/생성/완료 여부 + 스피치 연습 생성/활성 여부
     application = _get_owned_application(db, user_id, application_id)
 
     stage_rows = (
@@ -172,30 +181,29 @@ def get_application_detail(db: Session, user_id: uuid.UUID, application_id: uuid
         )
     current_status = status_by_stage.get(application.stage)
 
-    # 회고 세션이 COMPLETED면 해당 면접 회고 '완료'
+    # 회고 세션이 있으면 '생성', COMPLETED면 '완료'
+    sessions = (
+        db.query(SessionModel.type, SessionModel.status)
+        .filter(SessionModel.application_id == application.application_id)
+        .all()
+    )
+    created_types = {session_type for session_type, _ in sessions}
     completed_types = {
         session_type
-        for (session_type,) in (
-            db.query(SessionModel.type)
-            .filter(
-                SessionModel.application_id == application.application_id,
-                SessionModel.status == SessionStatusEnum.COMPLETED,
-            )
-            .all()
-        )
+        for session_type, status in sessions
+        if status == SessionStatusEnum.COMPLETED
     }
-    first_done = SessionTypeEnum.FIRST in completed_types
-    second_done = SessionTypeEnum.SECOND in completed_types
+    available_types = available_retrospect_types(application)
+    retrospects = {
+        session_type: RetrospectFlags(
+            available=session_type in available_types,
+            created=session_type in created_types,
+            completed=session_type in completed_types,
+        )
+        for session_type in SessionTypeEnum
+    }
 
     speech_created = is_speech_practice_created(db, application)
     speech_available = is_speech_practice_available(db, application)
 
-    return (
-        application,
-        timeline,
-        current_status,
-        first_done,
-        second_done,
-        speech_created,
-        speech_available,
-    )
+    return application, timeline, current_status, retrospects, speech_created, speech_available

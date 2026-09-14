@@ -92,8 +92,27 @@ class ApplicationDetailResponse(BaseModel):
     status: Optional[StageStatusEnum] = Field(
         None, description="현재 전형 단계의 상태 (진행중 / 합격 / 탈락). null = 대기", examples=["진행중"]
     )
-    first_interview_retrospect_completed: bool = Field(..., description="1차 면접 회고 완료 여부")
-    second_interview_retrospect_completed: bool = Field(..., description="2차 면접 회고 완료 여부")
+    first_retrospect_available: bool = Field(
+        ..., description="1차 면접 회고 활성화 여부 (현재 전형 단계가 1차면접 이상)"
+    )
+    first_retrospect_created: bool = Field(
+        ..., description="1차 면접 회고 시작 여부 (대화 중 포함, true면 새로 시작 불가)"
+    )
+    first_retrospect_completed: bool = Field(..., description="1차 면접 회고 완료 여부 (요약 완료)")
+    second_retrospect_available: bool = Field(
+        ..., description="2차 면접 회고 활성화 여부 (현재 전형 단계가 2차면접 이상)"
+    )
+    second_retrospect_created: bool = Field(
+        ..., description="2차 면접 회고 시작 여부 (대화 중 포함, true면 새로 시작 불가)"
+    )
+    second_retrospect_completed: bool = Field(..., description="2차 면접 회고 완료 여부 (요약 완료)")
+    final_retrospect_available: bool = Field(
+        ..., description="최종 면접 회고 활성화 여부 (현재 전형 단계가 최종면접)"
+    )
+    final_retrospect_created: bool = Field(
+        ..., description="최종 면접 회고 시작 여부 (대화 중 포함, true면 새로 시작 불가)"
+    )
+    final_retrospect_completed: bool = Field(..., description="최종 면접 회고 완료 여부 (요약 완료)")
     speech_practice_created: bool = Field(
         ..., description="스피치 연습 최초 생성 여부 (POST /speech-practices 로 예상 질문이 저장된 적 있음)"
     )

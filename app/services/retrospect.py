@@ -19,7 +19,7 @@ from app.core.exceptions import (
     RetrospectNotInProgressError,
     SessionNotFoundError,
 )
-from app.models.application import Application, ApplicationStatusEnum, StageEnum
+from app.models.application import Application, StageEnum
 from app.models.session import (
     Chat,
     InterviewAnalysis,
@@ -33,8 +33,7 @@ from app.schemas.retrospect import RetrospectCreateRequest
 
 logger = logging.getLogger(__name__)
 
-# 면접 회고가 활성화되는 전형 단계 → 회고 세션 타입 매핑
-# status는 COMPLETED여야 함
+# 면접 전형 단계 → 회고 세션 타입 매핑
 _STAGE_TO_TYPE: dict[StageEnum, SessionTypeEnum] = {
     StageEnum.FIRST_INTERVIEW: SessionTypeEnum.FIRST,
     StageEnum.SECOND_INTERVIEW: SessionTypeEnum.SECOND,
@@ -46,6 +45,20 @@ _STAGE_TO_TYPE: dict[StageEnum, SessionTypeEnum] = {
 # AI 서버가 내려갔을 때 TCP 연결 시도만으로 90초를 기다린 뒤에야 에러가 나간다.
 # "연결이 되는가"는 5초면 충분히 판단되고, "추론이 오래 걸리는가"와는 성격이 다른 대기다.
 _AI_TIMEOUT = httpx.Timeout(connect=5.0, read=90.0, write=30.0, pool=5.0)
+
+
+def available_retrospect_types(application: Application) -> set[SessionTypeEnum]:
+    """면접 회고 게이팅: 현재 단계까지 도달한 면접 단계의 회고를 상태와 무관하게 모두 허용함."""
+    if application.stage is None:
+        return set()
+
+    pipeline = list(StageEnum)
+    current_index = pipeline.index(application.stage)
+    return {
+        session_type
+        for stage, session_type in _STAGE_TO_TYPE.items()
+        if pipeline.index(stage) <= current_index
+    }
 
 
 def _get_owned_application(
@@ -165,8 +178,9 @@ def start_retrospect(
     """회고 세션을 시작한다. 게이팅 검증 → 세션 생성 → AI 첫 인사 수신."""
     application = _get_owned_application(db, user_id, body.application_id)
 
-    session_type = _STAGE_TO_TYPE.get(application.stage)
-    if session_type is None or application.status != ApplicationStatusEnum.COMPLETED:
+    # type 생략 시 현재 단계의 면접 회고로 처리함.
+    session_type = body.type or _STAGE_TO_TYPE.get(application.stage)
+    if session_type not in available_retrospect_types(application):
         raise RetrospectNotAllowedError()
 
     # 면접 단계당 회고 1개 (이미 있으면 GET으로 이어가기)
