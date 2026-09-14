@@ -19,3 +19,7 @@ __pycache__/
 
 # 부하테스트 시드 (생성물 — JWT 토큰 포함)
 loadtest/seed_data.json
+
+# 로컬 작업용 (개인 초안 / 로컬 compose)
+/drafts/
+/docker-compose.yml
