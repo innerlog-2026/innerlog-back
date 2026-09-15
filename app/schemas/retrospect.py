@@ -18,6 +18,11 @@ from app.models.session import (
 
 class RetrospectCreateRequest(BaseModel):
     application_id: uuid.UUID = Field(..., description="회고할 지원 현황 ID")
+    type: Optional[SessionTypeEnum] = Field(
+        None,
+        description="회고 대상 면접 단계 (1차면접 / 2차면접 / 최종면접). 생략 시 현재 전형 단계의 면접",
+        examples=["1차면접"],
+    )
     level: LevelEnum = Field(
         ..., description="면접 체감 난이도 (HARD / MEDIUM_HIGH / MEDIUM_LOW / EASY)", examples=["MEDIUM_HIGH"]
     )

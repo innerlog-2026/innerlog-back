@@ -11,6 +11,7 @@ from app.api.docs.application import (
     update_stage_result_docs,
 )
 from app.core.database import get_db
+from app.models.session import SessionTypeEnum
 from app.models.user import User
 from app.schemas.application import (
     ApplicationCreateRequest,
@@ -61,17 +62,29 @@ def get_application_detail(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    application, timeline, current_status, first_done, second_done = (
+    application, timeline, current_status, retrospects, speech_created, speech_available = (
         application_service.get_application_detail(db, current_user.user_id, application_id)
     )
+    first = retrospects[SessionTypeEnum.FIRST]
+    second = retrospects[SessionTypeEnum.SECOND]
+    final = retrospects[SessionTypeEnum.FINAL]
     return ApplicationDetailResponse(
         application_id=application.application_id,
         company_name=application.company_name,
         position=application.position,
         current_stage=application.stage,
         status=current_status,
-        first_interview_retrospect_completed=first_done,
-        second_interview_retrospect_completed=second_done,
+        first_retrospect_available=first.available,
+        first_retrospect_created=first.created,
+        first_retrospect_completed=first.completed,
+        second_retrospect_available=second.available,
+        second_retrospect_created=second.created,
+        second_retrospect_completed=second.completed,
+        final_retrospect_available=final.available,
+        final_retrospect_created=final.created,
+        final_retrospect_completed=final.completed,
+        speech_practice_created=speech_created,
+        speech_practice_available=speech_available,
         timeline=[TimelineStageItem(stage=stage, status=status) for stage, status in timeline],
     )
 
