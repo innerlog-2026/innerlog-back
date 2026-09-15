@@ -4,6 +4,7 @@ from typing import Optional
 
 import httpx
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -93,6 +94,12 @@ def _get_owned_session(
     if not session:
         raise SessionNotFoundError()
     return session
+
+
+def _violated_constraint(exc: IntegrityError) -> Optional[str]:
+    """IntegrityError 에서 위반된 제약조건 이름을 꺼냄."""
+    diag = getattr(exc.orig, "diag", None)
+    return getattr(diag, "constraint_name", None)
 
 
 def _next_sequence(db: Session, session_id: uuid.UUID) -> int:
@@ -220,7 +227,14 @@ def start_retrospect(
         ai_state=initial_state,
     )
     db.add(session)
-    db.flush()  # session_id 확보 (AI /chat에 넘겨야 함)
+    try:
+        db.flush()  # session_id 확보 (AI /chat에 넘겨야 함)
+    except IntegrityError as exc:
+        # 위 존재 확인 이후 동시 요청이 같은 type 세션을 먼저 저장한 경우를 409 로 변환함.
+        db.rollback()
+        if _violated_constraint(exc) == "uq_session_application_type":
+            raise RetrospectAlreadyExistsError()
+        raise
 
     # 첫 턴(오프닝)은 빈 user_message로 호출하면 AI가 먼저 인사 메시지를 생성한다. (AI API v2)
     ai_response, updated_state = _chat_ai(session.session_id, "", initial_state)
@@ -321,7 +335,21 @@ def summarize_retrospect(
         session.status = SessionStatusEnum.COMPLETED
         session.ended_at = func.now()
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        # 위 존재 확인 이후 동시 요청이 분석을 먼저 저장한 경우 저장된 결과를 반환함 (멱등).
+        db.rollback()
+        if _violated_constraint(exc) != "uq_interview_analysis_session":
+            raise
+        session = _get_owned_session(db, user_id, session_id)
+        existing = (
+            db.query(InterviewAnalysis)
+            .filter(InterviewAnalysis.session_id == session.session_id)
+            .one()
+        )
+        return session, existing
+
     db.refresh(analysis)
     db.refresh(session)
     return session, analysis

@@ -3,7 +3,7 @@ import enum
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import String, Integer, Text, ForeignKey, Enum as SAEnum, func
+from sqlalchemy import String, Integer, Text, ForeignKey, UniqueConstraint, Enum as SAEnum, func
 from sqlalchemy.dialects.postgresql import UUID, ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -36,6 +36,10 @@ class SenderEnum(str, enum.Enum):
 
 class Session(Base):
     __tablename__ = "session"
+    __table_args__ = (
+        # 한 지원의 같은 면접 단계 회고는 1개만 허용함.
+        UniqueConstraint("application_id", "type", name="uq_session_application_type"),
+    )
 
     session_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     application_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("application.application_id"), nullable=False)
@@ -67,6 +71,10 @@ class Chat(Base):
 
 class InterviewAnalysis(Base):
     __tablename__ = "interview_analysis"
+    __table_args__ = (
+        # 회고 세션당 분석 결과는 1개만 허용함.
+        UniqueConstraint("session_id", name="uq_interview_analysis_session"),
+    )
 
     interview_analysis_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     session_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("session.session_id"), nullable=False)
