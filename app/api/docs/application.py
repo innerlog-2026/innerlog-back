@@ -1,8 +1,9 @@
 from app.api.docs.responses import error_response
-from app.core.exceptions import ApplicationNotFoundError, InvalidTokenError
+from app.core.exceptions import ApplicationNotFoundError, InvalidTokenError, PastStageRevertError
 
 _unauthorized_response = error_response("인증 실패", InvalidTokenError)
 _not_found_response = error_response("지원 현황 없음", ApplicationNotFoundError)
+_past_stage_revert_response = error_response("지난 전형 단계를 진행중으로 되돌리는 요청", PastStageRevertError)
 
 create_application_docs = dict(
     summary="지원 현황 생성",
@@ -30,15 +31,21 @@ update_stage_result_docs = dict(
     summary="진행 결과 수정",
     description="지원 현황의 특정 전형 단계 상태(진행중/합격/탈락)를 설정한다. "
     "(지원, 단계) 단위로 upsert한다. '대기'는 저장하지 않는다(행이 없으면 대기). "
-    "현재 진행 단계 포인터는 앞으로만 이동한다. 과거 단계 결과를 정정하는 요청은 "
-    "타임라인만 갱신하고 포인터를 되돌리지 않는다. 합격이어도 다음 단계로 자동 전진하지 않으며, "
+    "현재 진행 단계 포인터보다 뒤 단계를 요청하면 포인터가 그 단계로 전진한다. "
+    "지난 단계를 합격으로 정정하면 타임라인만 갱신하고 포인터는 유지한다. "
+    "지난 단계를 탈락으로 정정하면 포인터가 그 단계로 후퇴하고, 그 뒤 단계의 결과는 삭제되어 대기로 돌아간다. "
+    "지난 단계를 진행중으로 되돌리는 요청은 409를 반환한다. 합격이어도 다음 단계로 자동 전진하지 않으며, "
     "다음 단계로 넘기려면 `{stage: 다음단계, status: 진행중}`을 명시적으로 요청해야 한다. "
+    "포인터가 앞으로 이동하면 새 단계보다 앞의 '진행중' 단계는 '합격'으로 함께 정리된다 "
+    "(탈락은 유지, 건너뛴 대기 단계는 대기 유지). 따라서 현재 단계 합격 후 다음 단계로 넘길 때는 "
+    "`{stage: 다음단계, status: 진행중}` 한 번만 요청하면 된다. "
     "지원 현황 상태(IN_PROGRESS / COMPLETED)는 포인터 단계의 타임라인 값에서 파생된다 "
     "(합격·탈락 = COMPLETED, 진행중 = IN_PROGRESS). 별도로 설정할 필요 없다.",
     responses={
         200: {"description": "진행 결과 수정 성공"},
         401: _unauthorized_response,
         404: _not_found_response,
+        409: _past_stage_revert_response,
     },
 )
 

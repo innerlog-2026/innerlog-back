@@ -31,6 +31,11 @@ class ApplicationNotFoundError(InnerLogException):
         super().__init__(404, "APPLICATION_404", "지원 현황을 찾을 수 없습니다.")
 
 
+class PastStageRevertError(InnerLogException):
+    def __init__(self):
+        super().__init__(409, "APPLICATION_STAGE_409", "지난 전형 단계는 진행중으로 되돌릴 수 없습니다.")
+
+
 class QuestionNotFoundError(InnerLogException):
     def __init__(self):
         super().__init__(404, "QUESTION_404", "질문을 찾을 수 없습니다.")
