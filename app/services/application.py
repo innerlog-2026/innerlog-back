@@ -1,8 +1,9 @@
 import uuid
+from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import ApplicationNotFoundError
+from app.core.exceptions import ApplicationNotFoundError, PastStageRevertError
 from app.models.application import (
     Application,
     ApplicationStage,
@@ -12,8 +13,17 @@ from app.models.application import (
 )
 from app.models.session import Session as SessionModel, SessionStatusEnum, SessionTypeEnum
 from app.schemas.application import ApplicationCreateRequest, TimelineStatusEnum
+from app.services.retrospect import available_retrospect_types
+from app.services.speech import is_speech_practice_available, is_speech_practice_created
 
 PAGE_SIZE = 5
+
+
+@dataclass
+class RetrospectFlags:
+    available: bool  # 현재 전형 단계에서 회고 시작 허용
+    created: bool  # 회고 세션 존재 (대화 중 포함)
+    completed: bool  # 회고 세션 COMPLETED (요약 완료)
 
 
 def _get_owned_application(db: Session, user_id: uuid.UUID, application_id: uuid.UUID) -> Application:
@@ -119,6 +129,16 @@ def update_stage_result(
     # (application, stage)별 상태를 upsert. '대기'는 저장하지 않으므로 진행중/합격/탈락만 들어온다.
     application = _get_owned_application(db, user_id, application_id)
 
+    pipeline = list(StageEnum)
+    target_index = pipeline.index(stage)
+    current_index = None if application.stage is None else pipeline.index(application.stage)
+    is_forward = current_index is None or target_index > current_index
+    is_past = current_index is not None and target_index < current_index
+
+    # 포인터보다 앞 단계는 진행중일 수 없으므로 지난 단계를 진행중으로 되돌리는 요청은 거절함.
+    if is_past and status is StageStatusEnum.IN_PROGRESS:
+        raise PastStageRevertError()
+
     record = (
         db.query(ApplicationStage)
         .filter(
@@ -137,11 +157,38 @@ def update_stage_result(
         )
         db.add(record)
 
-    # 포인터는 앞으로만 이동. 과거 단계 결과를 정정하는 요청은 타임라인만 갱신하고
-    # 포인터를 되돌리지 않는다 (회고/스피치 게이팅이 Application.stage를 읽는다).
-    pipeline = list(StageEnum)
-    if application.stage is None or pipeline.index(stage) > pipeline.index(application.stage):
+    # 포인터는 뒤 단계 요청 시 전진하고, 지난 단계 탈락 정정 시에만 그 단계로 후퇴함.
+    # 지난 단계 합격 정정은 타임라인만 갱신함 (회고/스피치 게이팅이 Application.stage를 읽음).
+    if is_forward:
         application.stage = stage
+
+        # 포인터 전진 시 새 단계보다 앞의 진행중 단계는 통과한 것으로 보고 합격으로 정리함.
+        # 탈락은 사용자 입력 결과라 유지하고, 행이 없는 단계(대기 = 건너뛴 단계)는 만들지 않음.
+        earlier_in_progress = (
+            db.query(ApplicationStage)
+            .filter(
+                ApplicationStage.application_id == application.application_id,
+                ApplicationStage.stage.in_(pipeline[:target_index]),
+                ApplicationStage.status == StageStatusEnum.IN_PROGRESS,
+            )
+            .all()
+        )
+        for earlier in earlier_in_progress:
+            earlier.status = StageStatusEnum.PASS
+    elif is_past and status is StageStatusEnum.FAIL:
+        application.stage = stage
+
+        # 탈락한 단계 이후로는 진행할 수 없으므로 뒤 단계 행을 삭제해 대기로 되돌림.
+        later_rows = (
+            db.query(ApplicationStage)
+            .filter(
+                ApplicationStage.application_id == application.application_id,
+                ApplicationStage.stage.in_(pipeline[target_index + 1 :]),
+            )
+            .all()
+        )
+        for later in later_rows:
+            db.delete(later)
 
     # 지원 현황 상태는 포인터 단계의 타임라인 값에서 파생 (합격/탈락 = 완료)
     db.flush()
@@ -153,7 +200,7 @@ def update_stage_result(
 
 
 def get_application_detail(db: Session, user_id: uuid.UUID, application_id: uuid.UUID):
-    # 상세 + 타임라인(고정 파이프라인) + 1·2차 회고 완료 여부
+    # 상세 + 타임라인(고정 파이프라인) + 면접 회고 활성/생성/완료 여부 + 스피치 연습 생성/활성 여부
     application = _get_owned_application(db, user_id, application_id)
 
     stage_rows = (
@@ -171,19 +218,29 @@ def get_application_detail(db: Session, user_id: uuid.UUID, application_id: uuid
         )
     current_status = status_by_stage.get(application.stage)
 
-    # 회고 세션이 COMPLETED면 해당 면접 회고 '완료'
+    # 회고 세션이 있으면 '생성', COMPLETED면 '완료'
+    sessions = (
+        db.query(SessionModel.type, SessionModel.status)
+        .filter(SessionModel.application_id == application.application_id)
+        .all()
+    )
+    created_types = {session_type for session_type, _ in sessions}
     completed_types = {
         session_type
-        for (session_type,) in (
-            db.query(SessionModel.type)
-            .filter(
-                SessionModel.application_id == application.application_id,
-                SessionModel.status == SessionStatusEnum.COMPLETED,
-            )
-            .all()
-        )
+        for session_type, status in sessions
+        if status == SessionStatusEnum.COMPLETED
     }
-    first_done = SessionTypeEnum.FIRST in completed_types
-    second_done = SessionTypeEnum.SECOND in completed_types
+    available_types = available_retrospect_types(application)
+    retrospects = {
+        session_type: RetrospectFlags(
+            available=session_type in available_types,
+            created=session_type in created_types,
+            completed=session_type in completed_types,
+        )
+        for session_type in SessionTypeEnum
+    }
 
-    return application, timeline, current_status, first_done, second_done
+    speech_created = is_speech_practice_created(db, application)
+    speech_available = is_speech_practice_available(db, application)
+
+    return application, timeline, current_status, retrospects, speech_created, speech_available

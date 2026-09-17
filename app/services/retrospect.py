@@ -4,6 +4,7 @@ from typing import Optional
 
 import httpx
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -19,7 +20,7 @@ from app.core.exceptions import (
     RetrospectNotInProgressError,
     SessionNotFoundError,
 )
-from app.models.application import Application, ApplicationStatusEnum, StageEnum
+from app.models.application import Application, StageEnum
 from app.models.session import (
     Chat,
     InterviewAnalysis,
@@ -33,8 +34,7 @@ from app.schemas.retrospect import RetrospectCreateRequest
 
 logger = logging.getLogger(__name__)
 
-# 면접 회고가 활성화되는 전형 단계 → 회고 세션 타입 매핑
-# status는 COMPLETED여야 함
+# 면접 전형 단계 → 회고 세션 타입 매핑
 _STAGE_TO_TYPE: dict[StageEnum, SessionTypeEnum] = {
     StageEnum.FIRST_INTERVIEW: SessionTypeEnum.FIRST,
     StageEnum.SECOND_INTERVIEW: SessionTypeEnum.SECOND,
@@ -46,6 +46,20 @@ _STAGE_TO_TYPE: dict[StageEnum, SessionTypeEnum] = {
 # AI 서버가 내려갔을 때 TCP 연결 시도만으로 90초를 기다린 뒤에야 에러가 나간다.
 # "연결이 되는가"는 5초면 충분히 판단되고, "추론이 오래 걸리는가"와는 성격이 다른 대기다.
 _AI_TIMEOUT = httpx.Timeout(connect=5.0, read=90.0, write=30.0, pool=5.0)
+
+
+def available_retrospect_types(application: Application) -> set[SessionTypeEnum]:
+    """면접 회고 게이팅: 현재 단계까지 도달한 면접 단계의 회고를 상태와 무관하게 모두 허용함."""
+    if application.stage is None:
+        return set()
+
+    pipeline = list(StageEnum)
+    current_index = pipeline.index(application.stage)
+    return {
+        session_type
+        for stage, session_type in _STAGE_TO_TYPE.items()
+        if pipeline.index(stage) <= current_index
+    }
 
 
 def _get_owned_application(
@@ -80,6 +94,12 @@ def _get_owned_session(
     if not session:
         raise SessionNotFoundError()
     return session
+
+
+def _violated_constraint(exc: IntegrityError) -> Optional[str]:
+    """IntegrityError 에서 위반된 제약조건 이름을 꺼냄."""
+    diag = getattr(exc.orig, "diag", None)
+    return getattr(diag, "constraint_name", None)
 
 
 def _next_sequence(db: Session, session_id: uuid.UUID) -> int:
@@ -165,8 +185,9 @@ def start_retrospect(
     """회고 세션을 시작한다. 게이팅 검증 → 세션 생성 → AI 첫 인사 수신."""
     application = _get_owned_application(db, user_id, body.application_id)
 
-    session_type = _STAGE_TO_TYPE.get(application.stage)
-    if session_type is None or application.status != ApplicationStatusEnum.COMPLETED:
+    # type 생략 시 현재 단계의 면접 회고로 처리함.
+    session_type = body.type or _STAGE_TO_TYPE.get(application.stage)
+    if session_type not in available_retrospect_types(application):
         raise RetrospectNotAllowedError()
 
     # 면접 단계당 회고 1개 (이미 있으면 GET으로 이어가기)
@@ -206,7 +227,14 @@ def start_retrospect(
         ai_state=initial_state,
     )
     db.add(session)
-    db.flush()  # session_id 확보 (AI /chat에 넘겨야 함)
+    try:
+        db.flush()  # session_id 확보 (AI /chat에 넘겨야 함)
+    except IntegrityError as exc:
+        # 위 존재 확인 이후 동시 요청이 같은 type 세션을 먼저 저장한 경우를 409 로 변환함.
+        db.rollback()
+        if _violated_constraint(exc) == "uq_session_application_type":
+            raise RetrospectAlreadyExistsError()
+        raise
 
     # 첫 턴(오프닝)은 빈 user_message로 호출하면 AI가 먼저 인사 메시지를 생성한다. (AI API v2)
     ai_response, updated_state = _chat_ai(session.session_id, "", initial_state)
@@ -307,7 +335,21 @@ def summarize_retrospect(
         session.status = SessionStatusEnum.COMPLETED
         session.ended_at = func.now()
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        # 위 존재 확인 이후 동시 요청이 분석을 먼저 저장한 경우 저장된 결과를 반환함 (멱등).
+        db.rollback()
+        if _violated_constraint(exc) != "uq_interview_analysis_session":
+            raise
+        session = _get_owned_session(db, user_id, session_id)
+        existing = (
+            db.query(InterviewAnalysis)
+            .filter(InterviewAnalysis.session_id == session.session_id)
+            .one()
+        )
+        return session, existing
+
     db.refresh(analysis)
     db.refresh(session)
     return session, analysis
