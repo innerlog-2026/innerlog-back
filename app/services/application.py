@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import ApplicationNotFoundError
+from app.core.exceptions import ApplicationNotFoundError, PastStageRevertError
 from app.models.application import (
     Application,
     ApplicationStage,
@@ -129,6 +129,16 @@ def update_stage_result(
     # (application, stage)별 상태를 upsert. '대기'는 저장하지 않으므로 진행중/합격/탈락만 들어온다.
     application = _get_owned_application(db, user_id, application_id)
 
+    pipeline = list(StageEnum)
+    target_index = pipeline.index(stage)
+    current_index = None if application.stage is None else pipeline.index(application.stage)
+    is_forward = current_index is None or target_index > current_index
+    is_past = current_index is not None and target_index < current_index
+
+    # 포인터보다 앞 단계는 진행중일 수 없으므로 지난 단계를 진행중으로 되돌리는 요청은 거절함.
+    if is_past and status is StageStatusEnum.IN_PROGRESS:
+        raise PastStageRevertError()
+
     record = (
         db.query(ApplicationStage)
         .filter(
@@ -147,11 +157,38 @@ def update_stage_result(
         )
         db.add(record)
 
-    # 포인터는 앞으로만 이동. 과거 단계 결과를 정정하는 요청은 타임라인만 갱신하고
-    # 포인터를 되돌리지 않는다 (회고/스피치 게이팅이 Application.stage를 읽는다).
-    pipeline = list(StageEnum)
-    if application.stage is None or pipeline.index(stage) > pipeline.index(application.stage):
+    # 포인터는 뒤 단계 요청 시 전진하고, 지난 단계 탈락 정정 시에만 그 단계로 후퇴함.
+    # 지난 단계 합격 정정은 타임라인만 갱신함 (회고/스피치 게이팅이 Application.stage를 읽음).
+    if is_forward:
         application.stage = stage
+
+        # 포인터 전진 시 새 단계보다 앞의 진행중 단계는 통과한 것으로 보고 합격으로 정리함.
+        # 탈락은 사용자 입력 결과라 유지하고, 행이 없는 단계(대기 = 건너뛴 단계)는 만들지 않음.
+        earlier_in_progress = (
+            db.query(ApplicationStage)
+            .filter(
+                ApplicationStage.application_id == application.application_id,
+                ApplicationStage.stage.in_(pipeline[:target_index]),
+                ApplicationStage.status == StageStatusEnum.IN_PROGRESS,
+            )
+            .all()
+        )
+        for earlier in earlier_in_progress:
+            earlier.status = StageStatusEnum.PASS
+    elif is_past and status is StageStatusEnum.FAIL:
+        application.stage = stage
+
+        # 탈락한 단계 이후로는 진행할 수 없으므로 뒤 단계 행을 삭제해 대기로 되돌림.
+        later_rows = (
+            db.query(ApplicationStage)
+            .filter(
+                ApplicationStage.application_id == application.application_id,
+                ApplicationStage.stage.in_(pipeline[target_index + 1 :]),
+            )
+            .all()
+        )
+        for later in later_rows:
+            db.delete(later)
 
     # 지원 현황 상태는 포인터 단계의 타임라인 값에서 파생 (합격/탈락 = 완료)
     db.flush()
