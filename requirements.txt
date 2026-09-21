@@ -3,7 +3,7 @@ pydantic[email]
 python-jose[cryptography]==3.5.0
 annotated-doc==0.0.4
 annotated-types==0.7.0
-anyio==4.13.0
+anyio==4.14.2
 bcrypt==5.0.0
 click==8.3.3
 fastapi==0.136.1
