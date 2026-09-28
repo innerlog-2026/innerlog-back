@@ -20,7 +20,10 @@ list_applications_docs = dict(
     summary="지원 현황 목록 조회",
     description="로그인한 사용자의 지원 현황을 최신순으로 페이지네이션(한 페이지당 5개) 조회한다. "
     "각 항목은 기업명·전형단계·현황과 지원 ID를 담는다. "
-    "(IN_PROGRESS = 결과 대기, COMPLETED = 결과 나옴 = 합격 또는 탈락).",
+    "(IN_PROGRESS = 결과 대기, COMPLETED = 결과 나옴 = 합격 또는 탈락). "
+    "retrospect_status 는 현재 전형 단계의 면접 회고 상태다 "
+    "(회고전 = 회고 세션 없음, 회고중 = 대화 중 또는 요약 전, 회고완료 = 요약 완료). "
+    "현재 단계가 면접이 아니면 null이다.",
     responses={
         200: {"description": "지원 현황 목록 조회 성공"},
         401: _unauthorized_response,

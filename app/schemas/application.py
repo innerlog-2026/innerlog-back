@@ -16,6 +16,13 @@ class TimelineStatusEnum(str, enum.Enum):
     FAIL = "탈락"
 
 
+class RetrospectStatusEnum(str, enum.Enum):
+    # 응답 전용: 현재 단계 회고 세션 유무·상태에서 파생
+    NOT_STARTED = "회고전"
+    IN_PROGRESS = "회고중"
+    COMPLETED = "회고완료"
+
+
 class ApplicationCreateRequest(BaseModel):
     company_name: str = Field(..., description="회사명", examples=["네이버"])
     position: str = Field(..., description="지원 직무", examples=["백엔드 개발자"])
@@ -49,6 +56,12 @@ class ApplicationListItem(BaseModel):
     stage: Optional[StageEnum] = Field(None, description="전형 단계", examples=["서류전형"])
     status: ApplicationStatusEnum = Field(
         ..., description="해당 전형 단계의 상태 (IN_PROGRESS = 결과 대기 / COMPLETED = 합격 또는 탈락)"
+    )
+    retrospect_status: Optional[RetrospectStatusEnum] = Field(
+        None,
+        description="현재 전형 단계의 면접 회고 상태 (회고전 = 세션 없음 / 회고중 = 대화 중 또는 요약 전 / "
+        "회고완료 = 요약 완료). 현재 단계가 면접(1차면접/2차면접/최종면접)이 아니면 null",
+        examples=["회고전"],
     )
 
 
