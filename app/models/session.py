@@ -34,6 +34,19 @@ class SenderEnum(str, enum.Enum):
     USER = "USER"
 
 
+class WeaknessTagEnum(str, enum.Enum):
+    # InterviewAnalysis.weaknesses 에 저장되는 AI 보완점 고정 태그. 컬럼은 ARRAY(String) 이라 DB enum 아님.
+    TECH_CONCEPT = "기술 개념 설명 부족"
+    STAR_STRUCTURE = "STAR 구조 부족"
+    LOGICAL_FLOW = "논리적 전개 부족"
+    SELF_ANALYSIS = "자기 분석력 부족"
+    JOB_RELEVANCE = "직무 연관성 부족"
+    SPECIFICITY = "구체성 부족"
+    CONFIDENCE = "자신감 부족"
+    PREPARATION = "준비 부족"
+    PRESSURE_HANDLING = "압박 대응 부족"
+
+
 class Session(Base):
     __tablename__ = "session"
     __table_args__ = (

@@ -8,6 +8,7 @@
 > 운영에서는 backend/ai 가 같은 compose 네트워크에 있어 **`http://ai:8000`(컨테이너 내부 포트)** 로 호출한다.
 > 위 `:8001` 은 EC2 호스트에 공개된 포트(`127.0.0.1:8001 -> 컨테이너 8000`)이므로,
 > `AI_SERVER_URL` 을 `:8001` 로 바꾸면 오히려 연결이 끊긴다. (v2 재배포 시에도 이 값은 변경 불필요)
+
 - **명세 기준일:** 2026-08-16 (v2)
 - 우리 백엔드는 이 AI 서버를 HTTP로 **호출만** 한다. (AI 로직은 별도 프로세스)
 
@@ -184,16 +185,16 @@
 
 ### v1 → v2(최종) 변경점
 
-| 항목 | v1 | v2 (최종) |
-| --- | --- | --- |
-| 요청 오디오 경로 | `audio_file_path` | **`audio_file_path` (변경 없음)** — v2 초안에 `audio_path` 로 적혀 있던 것은 오기 |
-| `star_score` | `{situation: true, …}` 단순 bool | **`{situation: {present, comment}, …}` 객체**. 항상 4개 키 존재, 비행동형이면 `present`/`comment` 가 null |
-| `coherence` | 문자열 | **`{summary, detail}` 객체** |
-| 최상위 `feedback` | `star_detail`/`star_overall`/… | **유지**. `star_detail` 만 제거(내용이 `star_score[*].comment` 로 흡수). 남는 필드는 `star_overall` / `coherence_detail` / `overall` |
-| 종합 피드백 위치 | `feedback.overall` | **`feedback.overall`** (v2 초안에서 `content.overall` 로 옮긴다고 했으나 최종본에서 원복) |
-| `content.question_type` | 없음 | **추가** (행동형/의견형/기술형/가정형) |
-| `speed_label` | 문장형 | 짧은 라벨 (`느린 편`/`적절`/`빠른 편`) |
-| `silence_count` | 침묵 구간 수 | **1.5초 이상** 침묵 횟수 |
+| 항목                    | v1                               | v2 (최종)                                                                                                                            |
+| ----------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| 요청 오디오 경로        | `audio_file_path`                | **`audio_file_path` (변경 없음)** — v2 초안에 `audio_path` 로 적혀 있던 것은 오기                                                    |
+| `star_score`            | `{situation: true, …}` 단순 bool | **`{situation: {present, comment}, …}` 객체**. 항상 4개 키 존재, 비행동형이면 `present`/`comment` 가 null                            |
+| `coherence`             | 문자열                           | **`{summary, detail}` 객체**                                                                                                         |
+| 최상위 `feedback`       | `star_detail`/`star_overall`/…   | **유지**. `star_detail` 만 제거(내용이 `star_score[*].comment` 로 흡수). 남는 필드는 `star_overall` / `coherence_detail` / `overall` |
+| 종합 피드백 위치        | `feedback.overall`               | **`feedback.overall`** (v2 초안에서 `content.overall` 로 옮긴다고 했으나 최종본에서 원복)                                            |
+| `content.question_type` | 없음                             | **추가** (행동형/의견형/기술형/가정형)                                                                                               |
+| `speed_label`           | 문장형                           | 짧은 라벨 (`느린 편`/`적절`/`빠른 편`)                                                                                               |
+| `silence_count`         | 침묵 구간 수                     | **1.5초 이상** 침묵 횟수                                                                                                             |
 
 > **v2 초안 → 최종 정정 (2026-09-13):** 초안에는 "최상위 `feedback` 제거 → 종합 피드백은
 > `content.overall`", "행동형이 아니면 `star_score` 는 null" 로 적혀 있었다. AI 개발자
@@ -236,7 +237,7 @@
     "summary": "카카오 백엔드 1차 면접. DB 인덱스 관련 기술 질문에서 어려움을 겪음.",
     "hypothesis": "DB 인덱스의 동작 원리와 실제 사용 사례에 대한 이해 부족",
     "strengths": "인덱스의 기본 개념에 대해 설명을 시작할 수 있었음",
-    "weaknesses": ["인덱스 동작 원리 깊이 있는 이해 부족", "실제 쿼리 최적화 사례 설명 능력 부족"],
+    "weaknesses": ["기술 개념 설명 부족", "구체성 부족"],
     "gap_analysis": "실무 사례 기반 구체적 답변 준비 여부",
     "actions": ["DB 인덱스 B-tree/Hash 원리 학습", "실제 쿼리 최적화 사례 정리", "기술 면접 답변 STAR 기법 연습"]
   }
@@ -245,15 +246,24 @@
 
 **v1 → v2 변경점**
 
-| 항목 | v1 | v2 |
-| --- | --- | --- |
-| 6개 분석 항목 | 최상위 평면 | **`analysis` 객체로 중첩** |
-| 면접 단계 | `interview_stage` (`"1차"`) | **`interview_type`** (`"1차면접"` / `"2차면접"` / `"최종면접"`, 그 외 null) |
+| 항목          | v1                          | v2                                                                          |
+| ------------- | --------------------------- | --------------------------------------------------------------------------- |
+| 6개 분석 항목 | 최상위 평면                 | **`analysis` 객체로 중첩**                                                  |
+| 면접 단계     | `interview_stage` (`"1차"`) | **`interview_type`** (`"1차면접"` / `"2차면접"` / `"최종면접"`, 그 외 null) |
 
 > `interview_type` 외 값은 null 처리된다. `result`(합격/탈락)는 백엔드 협의 중 필드.
 >
 > 백엔드는 `analysis` 안의 6개 항목만 사용하고 `company`/`role`/`interview_type`은 자체 DB 값으로 채운다.
 > 파싱은 전환기 동안 v1(평면) 응답도 함께 수용한다 (`app/services/retrospect.py`의 `summarize_retrospect`).
+
+**`analysis.weaknesses` 고정 태그 (2026-09-28 변경)**
+
+LLM 자유문장 대신 아래 **9개 태그 중에서만 최대 3개**를 반환한다.
+
+`기술 개념 설명 부족` / `STAR 구조 부족` / `논리적 전개 부족` / `자기 분석력 부족` / `직무 연관성 부족` / `구체성 부족` / `자신감 부족` / `준비 부족` / `압박 대응 부족`
+
+> 백엔드는 이 목록을 `WeaknessTagEnum`(`app/models/session.py`)으로 두고, 대시보드 반복 보완 키워드 집계에 쓴다.
+> 변경 이전에 저장된 자유문장 weaknesses 는 태그 목록에 없으므로 집계에서 제외된다.
 
 ---
 

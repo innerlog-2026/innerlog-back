@@ -70,7 +70,12 @@ class InterviewAnalysisResult(BaseModel):
     summary: Optional[str] = Field(None, description="면접 총평")
     hypothesis: Optional[str] = Field(None, description="탈락/아쉬움 원인 가설")
     strengths: Optional[str] = Field(None, description="잘한 점")
-    weaknesses: list[str] = Field(default_factory=list, description="아쉬운 점")
+    weaknesses: list[str] = Field(
+        default_factory=list,
+        description="보완점 태그 (고정 태그 9종 중 최대 3개: 기술 개념 설명 부족 / STAR 구조 부족 / 논리적 전개 부족 / "
+        "자기 분석력 부족 / 직무 연관성 부족 / 구체성 부족 / 자신감 부족 / 준비 부족 / 압박 대응 부족)",
+        examples=[["구체성 부족", "기술 개념 설명 부족"]],
+    )
     gap_analysis: Optional[str] = Field(None, description="갭 분석")
     actions: list[str] = Field(default_factory=list, description="개선 가이드 (다음 지원 시 액션)")
 
