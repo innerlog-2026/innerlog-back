@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from app.api import auth, application, speech, retrospect
+from app.api import auth, application, speech, retrospect, dashboard
 from app.core.exceptions import InnerLogException
 
 app = FastAPI(
@@ -25,7 +25,7 @@ app.add_middleware(
 async def innerlog_exception_handler(request, exc: InnerLogException):
     return JSONResponse(status_code=exc.status_code, content=exc.detail)
 
-for router in [auth.router, application.router, speech.router, retrospect.router]:
+for router in [auth.router, application.router, speech.router, retrospect.router, dashboard.router]:
     app.include_router(router)
 
 
