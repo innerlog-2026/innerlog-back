@@ -44,10 +44,21 @@ def list_applications(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    items, total_count = application_service.list_applications(db, current_user.user_id, page)
+    items, total_count, retrospect_statuses = application_service.list_applications(
+        db, current_user.user_id, page
+    )
     total_pages = (total_count + PAGE_SIZE - 1) // PAGE_SIZE
     return ApplicationListResponse(
-        items=[ApplicationListItem.model_validate(item) for item in items],
+        items=[
+            ApplicationListItem(
+                application_id=item.application_id,
+                company_name=item.company_name,
+                stage=item.stage,
+                status=item.status,
+                retrospect_status=retrospect_statuses[item.application_id],
+            )
+            for item in items
+        ],
         page=page,
         size=PAGE_SIZE,
         total_count=total_count,
