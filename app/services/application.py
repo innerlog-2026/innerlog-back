@@ -1,5 +1,6 @@
 import uuid
 from dataclasses import dataclass
+from typing import Optional
 
 from sqlalchemy.orm import Session
 
@@ -12,8 +13,12 @@ from app.models.application import (
     StageStatusEnum,
 )
 from app.models.session import Session as SessionModel, SessionStatusEnum, SessionTypeEnum
-from app.schemas.application import ApplicationCreateRequest, TimelineStatusEnum
-from app.services.retrospect import available_retrospect_types
+from app.schemas.application import (
+    ApplicationCreateRequest,
+    RetrospectStatusEnum,
+    TimelineStatusEnum,
+)
+from app.services.retrospect import available_retrospect_types, retrospect_type_for_stage
 from app.services.speech import is_speech_practice_available, is_speech_practice_created
 
 PAGE_SIZE = 5
@@ -106,7 +111,9 @@ def create_application(db: Session, user_id: uuid.UUID, body: ApplicationCreateR
     return application
 
 
-def list_applications(db: Session, user_id: uuid.UUID, page: int) -> tuple[list[Application], int]:
+def list_applications(
+    db: Session, user_id: uuid.UUID, page: int
+) -> tuple[list[Application], int, dict[uuid.UUID, Optional[RetrospectStatusEnum]]]:
     # 본인 소유 지원 현황만 최신순으로 한 페이지(PAGE_SIZE)씩 조회
     base = db.query(Application).filter(Application.user_id == user_id)
     total_count = base.count()
@@ -116,7 +123,31 @@ def list_applications(db: Session, user_id: uuid.UUID, page: int) -> tuple[list[
         .limit(PAGE_SIZE)
         .all()
     )
-    return items, total_count
+
+    # 페이지 항목의 회고 세션을 한 번에 조회해 현재 단계 회고 상태를 판별함.
+    sessions = (
+        db.query(SessionModel.application_id, SessionModel.type, SessionModel.status)
+        .filter(SessionModel.application_id.in_([item.application_id for item in items]))
+        .all()
+    )
+    session_status_by_key = {
+        (application_id, session_type): status for application_id, session_type, status in sessions
+    }
+    retrospect_statuses: dict[uuid.UUID, Optional[RetrospectStatusEnum]] = {}
+    for item in items:
+        session_type = retrospect_type_for_stage(item.stage)
+        session_status = session_status_by_key.get((item.application_id, session_type))
+        if session_type is None:
+            # 면접 단계가 아니면 회고 대상이 아니므로 null로 둠.
+            retrospect_statuses[item.application_id] = None
+        elif session_status is None:
+            retrospect_statuses[item.application_id] = RetrospectStatusEnum.NOT_STARTED
+        elif session_status is SessionStatusEnum.COMPLETED:
+            retrospect_statuses[item.application_id] = RetrospectStatusEnum.COMPLETED
+        else:
+            # 세션이 있으면 새로 시작할 수 없으므로 완료 전 상태는 모두 회고중으로 봄.
+            retrospect_statuses[item.application_id] = RetrospectStatusEnum.IN_PROGRESS
+    return items, total_count, retrospect_statuses
 
 
 def update_stage_result(

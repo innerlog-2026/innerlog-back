@@ -62,6 +62,11 @@ def available_retrospect_types(application: Application) -> set[SessionTypeEnum]
     }
 
 
+def retrospect_type_for_stage(stage: Optional[StageEnum]) -> Optional[SessionTypeEnum]:
+    """전형 단계에 대응하는 면접 회고 타입을 반환함. 면접 단계가 아니면 None."""
+    return _STAGE_TO_TYPE.get(stage)
+
+
 def _get_owned_application(
     db: Session, user_id: uuid.UUID, application_id: uuid.UUID
 ) -> Application:
