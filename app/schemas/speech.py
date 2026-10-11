@@ -56,13 +56,38 @@ class SpeechPracticeQuestionGenerateResponse(BaseModel):
 # --- 스피치 분석 (AI POST /speech-analyze 응답 구조를 그대로 반영) ---
 
 
+class Baseline(BaseModel):
+    """게이지용 기준값 (AI Hub 채용면접 데이터 분포).
+
+    게이지 양 끝은 p5~p95, 보통 범위 띠는 p33~p67, 평균 눈금은 mean.
+    """
+
+    mean: Optional[float] = Field(None, description="평균")
+    p5: Optional[float] = Field(None, description="하위 5% (게이지 왼쪽 끝)")
+    p33: Optional[float] = Field(None, description="하위 33% (보통 범위 시작)")
+    p67: Optional[float] = Field(None, description="상위 33% (보통 범위 끝)")
+    p95: Optional[float] = Field(None, description="상위 5% (게이지 오른쪽 끝)")
+    unit: Optional[str] = Field(None, description="단위. length_baseline 에만 존재", examples=["sec"])
+    source: Optional[str] = Field(None, description="기준 데이터 출처", examples=["AI Hub 채용면접 데이터 (ICT 직군)"])
+    sample_count: Optional[int] = Field(None, description="표본 수")
+
+
 class AcousticResult(BaseModel):
     speed_wpm: Optional[float] = Field(None, description="발화 속도 (어절/분)", examples=[78.0])
     speed_label: Optional[str] = Field(None, examples=["평균(90.14어절/분)보다 느린 편이에요"])
+    speed_baseline: Optional[Baseline] = Field(
+        None, description="말 속도 기준값 (어절/분). 기준값 추가 이전 결과는 null"
+    )
     filler_words: dict[str, int] = Field(default_factory=dict, description="채움말별 횟수", examples=[{"그": 1}])
     silence_count: Optional[int] = Field(None, description="침묵 구간 수")
     duration_sec: Optional[float] = Field(None, description="발화 길이(초)", examples=[86.2])
     word_count: Optional[int] = Field(None, description="어절 수")
+    length_label: Optional[str] = Field(
+        None, description="답변 길이 문구 (p33/p67 기준 3단계)", examples=["평균(89.38초)보다 짧은 편이에요"]
+    )
+    length_baseline: Optional[Baseline] = Field(
+        None, description="답변 시간 기준값 (초). 기준값 추가 이전 결과는 null"
+    )
 
 
 class StarItem(BaseModel):

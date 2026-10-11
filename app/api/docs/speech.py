@@ -79,6 +79,26 @@ create_speech_practice_docs = dict(
 
 # AI v2 최종 명세(`/speech-analyze star_score 포맷 변경`)의 두 예시를 그대로 실는다.
 # 프론트가 행동형/비행동형 분기를 문서만 보고 구현할 수 있도록 둘 다 노출한다.
+_speed_baseline_example = {
+    "mean": 90.14,
+    "p5": 65.3,
+    "p33": 83.16,
+    "p67": 96.6,
+    "p95": 116.04,
+    "source": "AI Hub 채용면접 데이터 (ICT 직군)",
+    "sample_count": 6571,
+}
+_length_baseline_example = {
+    "mean": 89.38,
+    "p5": 45.86,
+    "p33": 84.04,
+    "p67": 104.68,
+    "p95": 119.68,
+    "unit": "sec",
+    "source": "AI Hub 채용면접 데이터 (ICT 직군)",
+    "sample_count": 5844,
+}
+
 _analyze_speech_success_response = {
     "description": "스피치 분석 성공",
     "content": {
@@ -91,11 +111,14 @@ _analyze_speech_success_response = {
                         "question_id": "9b8a7c6d-5e4f-4321-8765-1a2b3c4d5e6f",
                         "acoustic": {
                             "speed_wpm": 87.5,
-                            "speed_label": "적절",
+                            "speed_label": "평균(90.14어절/분)과 비슷한 수준이에요",
+                            "speed_baseline": _speed_baseline_example,
                             "filler_words": {"음": 2, "어": 1},
                             "silence_count": 1,
-                            "duration_sec": 62,
+                            "duration_sec": 62.0,
                             "word_count": 90,
+                            "length_label": "평균(89.38초)보다 짧은 편이에요",
+                            "length_baseline": _length_baseline_example,
                         },
                         "content": {
                             "question_type": "행동형",
@@ -123,12 +146,15 @@ _analyze_speech_success_response = {
                         "submission_id": "3f1c2b9e-0a1d-4c7b-9a2e-8d5f6b7c1a23",
                         "question_id": "9b8a7c6d-5e4f-4321-8765-1a2b3c4d5e6f",
                         "acoustic": {
-                            "speed_wpm": 92.0,
-                            "speed_label": "적절",
+                            "speed_wpm": 79.5,
+                            "speed_label": "평균(90.14어절/분)보다 느린 편이에요",
+                            "speed_baseline": _speed_baseline_example,
                             "filler_words": {},
                             "silence_count": 0,
-                            "duration_sec": 48,
-                            "word_count": 74,
+                            "duration_sec": 40.0,
+                            "word_count": 53,
+                            "length_label": "평균(89.38초)보다 짧은 편이에요",
+                            "length_baseline": _length_baseline_example,
                         },
                         "content": {
                             "question_type": "의견형",

@@ -152,11 +152,20 @@
 {
   "acoustic": {
     "speed_wpm": 87.5,
-    "speed_label": "적절",
+    "speed_label": "평균(90.14어절/분)과 비슷한 수준이에요",
+    "speed_baseline": {
+      "mean": 90.14, "p5": 65.3, "p33": 83.16, "p67": 96.6, "p95": 116.04,
+      "source": "AI Hub 채용면접 데이터 (ICT 직군)", "sample_count": 6571
+    },
     "filler_words": { "음": 2, "어": 1 },
     "silence_count": 1,
-    "duration_sec": 62,
-    "word_count": 90
+    "duration_sec": 62.0,
+    "word_count": 90,
+    "length_label": "평균(89.38초)보다 짧은 편이에요",
+    "length_baseline": {
+      "mean": 89.38, "p5": 45.86, "p33": 84.04, "p67": 104.68, "p95": 119.68,
+      "unit": "sec", "source": "AI Hub 채용면접 데이터 (ICT 직군)", "sample_count": 5844
+    }
   },
   "content": {
     "question_type": "행동형",
@@ -193,7 +202,7 @@
 | 최상위 `feedback`       | `star_detail`/`star_overall`/…   | **유지**. `star_detail` 만 제거(내용이 `star_score[*].comment` 로 흡수). 남는 필드는 `star_overall` / `coherence_detail` / `overall` |
 | 종합 피드백 위치        | `feedback.overall`               | **`feedback.overall`** (v2 초안에서 `content.overall` 로 옮긴다고 했으나 최종본에서 원복)                                            |
 | `content.question_type` | 없음                             | **추가** (행동형/의견형/기술형/가정형)                                                                                               |
-| `speed_label`           | 문장형                           | 짧은 라벨 (`느린 편`/`적절`/`빠른 편`)                                                                                               |
+| `speed_label`           | 문장형                           | 평균 대비 3단계 문장 (`평균(90.14어절/분)보다 느린 편이에요` / `…과 비슷한 수준이에요` / `…보다 빠른 편이에요`)                      |
 | `silence_count`         | 침묵 구간 수                     | **1.5초 이상** 침묵 횟수                                                                                                             |
 
 > **v2 초안 → 최종 정정 (2026-09-13):** 초안에는 "최상위 `feedback` 제거 → 종합 피드백은
@@ -204,6 +213,26 @@
 > (4개 키 존재 + 각 항목이 `present` 를 가진 객체이고 `present` 가 **boolean 또는 null**)를 강제한다.
 > 미지의 키는 허용해 명세 확장을 흡수한다. (`app/models/submission.py`)
 > `feedback.star_overall` / `feedback.coherence_detail` 은 `speech_content` 의 동명 컬럼에 저장한다.
+
+### `acoustic` 기준값 필드 (2026-10-01 추가)
+
+말 속도·답변 길이 카드에 "평균 대비 내 위치" 게이지를 그리기 위한 필드 3개가 추가됐다. 기존 필드는 변경 없음 (하위 호환).
+필러워드·침묵 구간은 근거 있는 기준값이 없어 대상에서 제외.
+
+| 필드              | 타입   | 설명                                                                                          |
+| ----------------- | ------ | --------------------------------------------------------------------------------------------- |
+| `speed_baseline`  | object | 말 속도 기준값 `{mean, p5, p33, p67, p95, source, sample_count}` (단위: 어절/분)              |
+| `length_baseline` | object | 답변 시간 기준값 `{mean, p5, p33, p67, p95, unit: "sec", source, sample_count}`               |
+| `length_label`    | string | 답변 길이 문구. `speed_label` 과 같은 패턴, p33/p67 기준 3단계 (짧은 편 / 비슷한 수준 / 긴 편) |
+
+- 출처: AI Hub 채용면접 데이터 (ICT 직군). 느림/빠름·짧음/김 경계는 평균이 아니라 **p33 / p67**.
+- 말 속도 기준(6,571건)과 답변 시간 기준(5,844건)은 표본 수가 다르다. AI Hub 답변 시간은 최대 약 121초.
+- 게이지 규칙(프론트): 양 끝 = `p5`~`p95`, 보통 범위 띠 = `p33`~`p67`, 평균 눈금 = `mean`,
+  마커 위치 = `(값 - p5) / (p95 - p5)` 를 0~1 로 clamp. 말 속도는 `speed_wpm`, 답변 길이는 `duration_sec` 를 값으로 쓴다.
+  baseline 이 null 인 예전 결과는 게이지를 숨기고 문구만 표시.
+
+> **백엔드 저장:** 3개 필드 모두 `speech_acoustic` 의 동명 컬럼에 저장한다 (baseline 은 JSONB).
+> 문구에 평균값이 박혀 있으므로 문구와 함께 생성 시점의 기준값을 남긴다. 추가 이전 행은 null.
 
 ---
 
