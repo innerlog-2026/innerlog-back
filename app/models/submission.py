@@ -47,11 +47,16 @@ class SpeechAcoustic(Base):
     speech_analysis_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("speech_analysis.speech_analysis_id"), nullable=False)
     speed_wpm: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     speed_label: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    # 말 속도 기준값 {mean, p5, p33, p67, p95, source, sample_count}
+    speed_baseline: Mapped[Optional[dict]] = mapped_column(JSONB(none_as_null=True), nullable=True)
     # AI v2: 채움말 -> 횟수 맵 (예: {"그": 1})
     filler_words: Mapped[Optional[dict]] = mapped_column(JSONB(none_as_null=True), nullable=True)
     silence_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     duration_sec: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     word_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    length_label: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    # 답변 시간 기준값 {mean, p5, p33, p67, p95, unit, source, sample_count}
+    length_baseline: Mapped[Optional[dict]] = mapped_column(JSONB(none_as_null=True), nullable=True)
 
     speech_analysis: Mapped["SpeechAnalysis"] = relationship("SpeechAnalysis", back_populates="speech_acoustic")
 
