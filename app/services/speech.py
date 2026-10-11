@@ -520,10 +520,13 @@ def analyze_speech(
             speech_analysis_id=analysis.speech_analysis_id,
             speed_wpm=acoustic.get("speed_wpm"),
             speed_label=acoustic.get("speed_label"),
+            speed_baseline=acoustic.get("speed_baseline"),
             filler_words=acoustic.get("filler_words"),
             silence_count=acoustic.get("silence_count"),
             duration_sec=acoustic.get("duration_sec"),
             word_count=acoustic.get("word_count"),
+            length_label=acoustic.get("length_label"),
+            length_baseline=acoustic.get("length_baseline"),
         )
     )
     db.add(
