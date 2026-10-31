@@ -5,6 +5,7 @@
 해당 Mock 서버는 "고정 지연"만 흉내내서 백엔드의 동시성 처리 능력(sync blocking → async)만 깨끗하게 측정하도록 함
 
 - 지연 시간: 환경변수 AI_DELAY_SECONDS (기본 2.0초)
+- /speech-analyze 지연: 환경변수 SPEECH_DELAY_SECONDS (기본값은 AI_DELAY_SECONDS)
 - 목 서버 자체는 async(asyncio.sleep)라 수천 개의 동시 요청을 병목 없이 흘려보낸다.
   → 병목은 오직 "테스트 대상 백엔드"에서만 발생한다.
 
@@ -17,6 +18,8 @@ import os
 from fastapi import FastAPI, HTTPException
 
 AI_DELAY_SECONDS = float(os.getenv("AI_DELAY_SECONDS", "2.0"))
+# 스피치 분석은 STT·STAR 분석이 이어져 다른 엔드포인트보다 길어 지연을 따로 설정함.
+SPEECH_DELAY_SECONDS = float(os.getenv("SPEECH_DELAY_SECONDS", str(AI_DELAY_SECONDS)))
 
 app = FastAPI(title="Mock AI Server (loadtest)")
 
@@ -53,7 +56,7 @@ async def speech_analyze(payload: dict):
     if "audio_file_path" not in payload:
         raise HTTPException(status_code=422, detail="field required: audio_file_path")
 
-    await asyncio.sleep(AI_DELAY_SECONDS)
+    await asyncio.sleep(SPEECH_DELAY_SECONDS)
     question_text = payload.get("question_text") or ""
     # 행동형만 STAR 를 채우고, 그 외에는 present/comment 를 null 로 반환함.
     is_behavioral = "경험" in question_text
@@ -80,11 +83,20 @@ async def speech_analyze(payload: dict):
     return {
         "acoustic": {
             "speed_wpm": 87.5,
-            "speed_label": "적절",
+            "speed_label": "평균(90.14어절/분)과 비슷한 수준이에요",
+            "speed_baseline": {
+                "mean": 90.14, "p5": 65.3, "p33": 83.16, "p67": 96.6, "p95": 116.04,
+                "source": "AI Hub 채용면접 데이터 (ICT 직군)", "sample_count": 6571,
+            },
             "filler_words": {"음": 2, "어": 1},
             "silence_count": 1,
             "duration_sec": 62,
             "word_count": 90,
+            "length_label": "평균(89.38초)보다 짧은 편이에요",
+            "length_baseline": {
+                "mean": 89.38, "p5": 45.86, "p33": 84.04, "p67": 104.68, "p95": 119.68,
+                "unit": "sec", "source": "AI Hub 채용면접 데이터 (ICT 직군)", "sample_count": 5844,
+            },
         },
         "content": {
             "question_type": question_type,
