@@ -1,0 +1,101 @@
+{
+  "label": "sync_rerun2",
+  "path": "/speech-practices/{application_id}/questions",
+  "duration_s": 20.0,
+  "levels": [
+    {
+      "concurrency": 5,
+      "duration_s": 21.48,
+      "total_requests": 50,
+      "ok": 50,
+      "fail": 0,
+      "rps": 2.33,
+      "p50_ms": 2142.6,
+      "p95_ms": 2207.3,
+      "p99_ms": 2208.6,
+      "max_ms": 2209.0,
+      "errors": {}
+    },
+    {
+      "concurrency": 10,
+      "duration_s": 21.37,
+      "total_requests": 100,
+      "ok": 100,
+      "fail": 0,
+      "rps": 4.68,
+      "p50_ms": 2108.5,
+      "p95_ms": 2283.4,
+      "p99_ms": 2353.4,
+      "max_ms": 2355.3,
+      "errors": {}
+    },
+    {
+      "concurrency": 15,
+      "duration_s": 21.74,
+      "total_requests": 150,
+      "ok": 150,
+      "fail": 0,
+      "rps": 6.9,
+      "p50_ms": 2076.0,
+      "p95_ms": 2572.1,
+      "p99_ms": 2588.4,
+      "max_ms": 2593.3,
+      "errors": {}
+    },
+    {
+      "concurrency": 20,
+      "duration_s": 22.23,
+      "total_requests": 149,
+      "ok": 149,
+      "fail": 0,
+      "rps": 6.7,
+      "p50_ms": 2650.9,
+      "p95_ms": 3913.9,
+      "p99_ms": 4285.5,
+      "max_ms": 4290.8,
+      "errors": {}
+    },
+    {
+      "concurrency": 30,
+      "duration_s": 23.77,
+      "total_requests": 165,
+      "ok": 165,
+      "fail": 0,
+      "rps": 6.94,
+      "p50_ms": 4184.2,
+      "p95_ms": 4850.9,
+      "p99_ms": 4927.0,
+      "max_ms": 6318.5,
+      "errors": {}
+    },
+    {
+      "concurrency": 50,
+      "duration_s": 28.27,
+      "total_requests": 135,
+      "ok": 135,
+      "fail": 0,
+      "rps": 4.78,
+      "p50_ms": 8873.6,
+      "p95_ms": 12405.2,
+      "p99_ms": 15228.2,
+      "max_ms": 18515.3,
+      "errors": {}
+    },
+    {
+      "concurrency": 100,
+      "duration_s": 60.07,
+      "total_requests": 100,
+      "ok": 0,
+      "fail": 100,
+      "rps": 0.0,
+      "p50_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0,
+      "max_ms": 0.0,
+      "errors": {
+        "http_500": 40,
+        "ReadTimeout": 60
+      }
+    }
+  ]
+}

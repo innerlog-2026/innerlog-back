@@ -1,0 +1,193 @@
+{
+  "label": "isolation_async_onloop",
+  "probe_path": "/applications",
+  "probe_concurrency": 10,
+  "duration_s": 90.0,
+  "ramp_s": 5.0,
+  "levels": [
+    {
+      "background_concurrency": 0,
+      "level_wall_s": 95.01,
+      "probe": {
+        "total_requests": 55051,
+        "ok": 55051,
+        "fail": 0,
+        "fail_rate": 0.0,
+        "rps": 611.61,
+        "p50_ms": 15.0,
+        "p95_ms": 25.8,
+        "p99_ms": 39.7,
+        "max_ms": 175.5,
+        "errors": {}
+      },
+      "background": {
+        "total_requests": 0,
+        "ok": 0,
+        "fail": 0,
+        "fail_rate": 0.0,
+        "rps": 0.0,
+        "p50_ms": 0.0,
+        "p95_ms": 0.0,
+        "p99_ms": 0.0,
+        "max_ms": 0.0,
+        "errors": {}
+      }
+    },
+    {
+      "background_concurrency": 5,
+      "level_wall_s": 120.45,
+      "probe": {
+        "total_requests": 54973,
+        "ok": 54973,
+        "fail": 0,
+        "fail_rate": 0.0,
+        "rps": 610.73,
+        "p50_ms": 15.0,
+        "p95_ms": 26.2,
+        "p99_ms": 38.3,
+        "max_ms": 171.7,
+        "errors": {}
+      },
+      "background": {
+        "total_requests": 10,
+        "ok": 10,
+        "fail": 0,
+        "fail_rate": 0.0,
+        "rps": 0.08,
+        "p50_ms": 60209.4,
+        "p95_ms": 60254.4,
+        "p99_ms": 60257.7,
+        "max_ms": 60258.6,
+        "errors": {}
+      }
+    },
+    {
+      "background_concurrency": 10,
+      "level_wall_s": 180.64,
+      "probe": {
+        "total_requests": 34257,
+        "ok": 34247,
+        "fail": 10,
+        "fail_rate": 0.0003,
+        "rps": 297.1,
+        "p50_ms": 14.9,
+        "p95_ms": 25.0,
+        "p99_ms": 36.9,
+        "max_ms": 157.2,
+        "errors": {
+          "ReadTimeout": 10
+        }
+      },
+      "background": {
+        "total_requests": 16,
+        "ok": 14,
+        "fail": 2,
+        "fail_rate": 0.125,
+        "rps": 0.08,
+        "p50_ms": 120345.1,
+        "p95_ms": 120388.1,
+        "p99_ms": 120409.6,
+        "max_ms": 120414.9,
+        "errors": {
+          "http_500": 2
+        }
+      }
+    },
+    {
+      "background_concurrency": 15,
+      "level_wall_s": 180.9,
+      "probe": {
+        "total_requests": 34117,
+        "ok": 34107,
+        "fail": 10,
+        "fail_rate": 0.0003,
+        "rps": 295.77,
+        "p50_ms": 14.9,
+        "p95_ms": 25.5,
+        "p99_ms": 37.9,
+        "max_ms": 80.0,
+        "errors": {
+          "ReadTimeout": 10
+        }
+      },
+      "background": {
+        "total_requests": 25,
+        "ok": 23,
+        "fail": 2,
+        "fail_rate": 0.08,
+        "rps": 0.13,
+        "p50_ms": 120427.5,
+        "p95_ms": 120512.5,
+        "p99_ms": 120514.7,
+        "max_ms": 120515.3,
+        "errors": {
+          "http_500": 2
+        }
+      }
+    },
+    {
+      "background_concurrency": 20,
+      "level_wall_s": 300.44,
+      "probe": {
+        "total_requests": 34417,
+        "ok": 34407,
+        "fail": 10,
+        "fail_rate": 0.0003,
+        "rps": 298.23,
+        "p50_ms": 14.9,
+        "p95_ms": 24.7,
+        "p99_ms": 37.0,
+        "max_ms": 84.1,
+        "errors": {
+          "ReadTimeout": 10
+        }
+      },
+      "background": {
+        "total_requests": 32,
+        "ok": 12,
+        "fail": 20,
+        "fail_rate": 0.625,
+        "rps": 0.04,
+        "p50_ms": 60382.6,
+        "p95_ms": 60429.4,
+        "p99_ms": 60433.2,
+        "max_ms": 60434.1,
+        "errors": {
+          "ReadTimeout": 20
+        }
+      }
+    },
+    {
+      "background_concurrency": 30,
+      "level_wall_s": 240.04,
+      "probe": {
+        "total_requests": 13795,
+        "ok": 13775,
+        "fail": 20,
+        "fail_rate": 0.0014,
+        "rps": 96.69,
+        "p50_ms": 15.0,
+        "p95_ms": 25.6,
+        "p99_ms": 38.0,
+        "max_ms": 70.7,
+        "errors": {
+          "ReadTimeout": 20
+        }
+      },
+      "background": {
+        "total_requests": 30,
+        "ok": 9,
+        "fail": 21,
+        "fail_rate": 0.7,
+        "rps": 0.04,
+        "p50_ms": 117656.6,
+        "p95_ms": 117707.8,
+        "p99_ms": 117712.0,
+        "max_ms": 117713.0,
+        "errors": {
+          "ReadTimeout": 21
+        }
+      }
+    }
+  ]
+}
