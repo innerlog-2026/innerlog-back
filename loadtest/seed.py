@@ -6,7 +6,8 @@
 - 각 지원현황에 자소서(PersonalStatement) 2개 + 목 AI가 돌려줄 질문 텍스트를 미리 심음
   → generate_more_questions 호출 시 dedup 으로 added_count=0 (steady-state, 요청당 부하 일정)
 
-결과를 loadtest/seed_data.json 으로 저장한다 (loadgen 이 읽음).
+결과를 loadtest/seed_data.json 으로 저장한다 (loadgen / isolation 이 읽음).
+question_ids 는 스피치 분석 제출 대상 질문 ID 목록 (isolation 배경 부하용).
 
 실행:
     source venv/bin/activate
@@ -95,12 +96,21 @@ def seed(num_apps: int, base_url: str) -> None:
 
         db.commit()
 
+        question_ids = [
+            str(question_id)
+            for (question_id,) in db.query(Question.question_id)
+            .join(Application, Question.application_id == Application.application_id)
+            .filter(Application.user_id == user.user_id)
+            .all()
+        ]
+
         token = create_access_token(str(user.user_id))
         data = {
             "base_url": base_url,
             "email": email,
             "access_token": token,
             "application_ids": app_ids,
+            "question_ids": question_ids,
         }
         with open(OUT_PATH, "w") as f:
             json.dump(data, f, indent=2)
