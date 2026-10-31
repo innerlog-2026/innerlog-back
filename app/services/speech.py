@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import uuid
@@ -187,9 +188,13 @@ def _assert_speech_allowed(db: Session, application: Application) -> None:
         raise SpeechPracticeNotAllowedError()
 
 
-def create_speech_practice(
+def _read_create_inputs(
     db: Session, user_id: uuid.UUID, body: SpeechPracticeCreateReq
-) -> tuple[uuid.UUID, list[Question]]:
+) -> uuid.UUID:
+    """create 의 동기 DB 읽기 단계.
+
+    소유권·게이팅·중복 생성 검증 후 commit 으로 트랜잭션을 끝내 커넥션을 풀에 반환함.
+    """
     application = _get_owned_application(db, user_id, body.application_id)
 
     _assert_speech_allowed(db, application)
@@ -197,23 +202,28 @@ def create_speech_practice(
     if is_speech_practice_created(db, application):
         raise SpeechPracticeAlreadyExistsError()
 
+    app_id = application.application_id
+    db.commit()  # 읽기 트랜잭션 종료 → 커넥션 반환 (AI await 동안 미점유)
+    return app_id
+
+
+def _save_created_practice(
+    db: Session, app_id: uuid.UUID, body: SpeechPracticeCreateReq, extracted: list[dict]
+) -> list[Question]:
+    """create 의 동기 DB 쓰기 단계. 자소서와 질문을 한 트랜잭션으로 저장함."""
     for sequence, item in enumerate(body.personal_statements, start=1):
         db.add(
             PersonalStatement(
-                application_id=application.application_id,
+                application_id=app_id,
                 question=item.question,
                 content=item.content,
                 sequence=sequence,
             )
         )
 
-    resume_text = _build_resume_text(body.personal_statements)
-
-    extracted = _extract_questions(body.company_name, body.position, resume_text)
-
     questions = [
         Question(
-            application_id=application.application_id,
+            application_id=app_id,
             question=item.get("question", ""),
             category=item.get("category"),
             sequence=sequence,
@@ -226,7 +236,25 @@ def create_speech_practice(
     for question in questions:
         db.refresh(question)
 
-    return application.application_id, questions
+    return questions
+
+
+async def create_speech_practice(
+    db: Session, user_id: uuid.UUID, body: SpeechPracticeCreateReq
+) -> tuple[uuid.UUID, list[Question]]:
+    """(동기 읽기 → 커넥션 반환) → (AI await, 커넥션 미점유) → (동기 쓰기) 순서로 처리함.
+
+    자소서와 질문은 AI 응답 후 한 트랜잭션으로 저장해 AI 실패 시 아무것도 남기지 않음.
+    DB 단계는 스레드에서 실행해 커넥션 풀 대기가 이벤트 루프를 막지 않도록 함.
+    """
+    app_id = await asyncio.to_thread(_read_create_inputs, db, user_id, body)
+
+    resume_text = _build_resume_text(body.personal_statements)
+
+    extracted = await _extract_questions_async(body.company_name, body.position, resume_text)
+
+    questions = await asyncio.to_thread(_save_created_practice, db, app_id, body, extracted)
+    return app_id, questions
 
 
 def list_questions(
@@ -354,20 +382,14 @@ def _read_generate_inputs(
     return app_id, company, position, resume_text, existing_texts, max_sequence
 
 
-async def generate_more_questions_async(
-    db: Session, user_id: uuid.UUID, application_id: uuid.UUID
+def _save_new_questions(
+    db: Session,
+    app_id: uuid.UUID,
+    extracted: list[dict],
+    existing_texts: set[str],
+    max_sequence: int,
 ) -> list[Question]:
-    """generate_more_questions 의 비동기 버전.
-
-    (동기 읽기 → 커넥션 반환) → (AI await, 커넥션 미점유) → (동기 쓰기) 순서로
-    외부 I/O 대기 동안 DB 커넥션·워커 스레드를 모두 놓는다.
-    """
-    app_id, company, position, resume_text, existing_texts, max_sequence = (
-        _read_generate_inputs(db, user_id, application_id)
-    )
-
-    extracted = await _extract_questions_async(company, position, resume_text)
-
+    """generate 의 동기 DB 쓰기 단계. 기존 질문과 텍스트가 겹치지 않는 항목만 저장함."""
     new_questions: list[Question] = []
     seen = set(existing_texts)
     sequence = max_sequence
@@ -393,6 +415,26 @@ async def generate_more_questions_async(
             db.refresh(question)
 
     return new_questions
+
+
+async def generate_more_questions_async(
+    db: Session, user_id: uuid.UUID, application_id: uuid.UUID
+) -> list[Question]:
+    """generate_more_questions 의 비동기 버전.
+
+    (동기 읽기 → 커넥션 반환) → (AI await, 커넥션 미점유) → (동기 쓰기) 순서로
+    외부 I/O 대기 동안 DB 커넥션·워커 스레드를 모두 놓는다.
+    DB 단계는 스레드에서 실행해 커넥션 풀 대기가 이벤트 루프를 막지 않도록 함.
+    """
+    app_id, company, position, resume_text, existing_texts, max_sequence = (
+        await asyncio.to_thread(_read_generate_inputs, db, user_id, application_id)
+    )
+
+    extracted = await _extract_questions_async(company, position, resume_text)
+
+    return await asyncio.to_thread(
+        _save_new_questions, db, app_id, extracted, existing_texts, max_sequence
+    )
 
 
 def _get_owned_question(
@@ -442,11 +484,11 @@ def _save_audio_file(upload: UploadFile, file_stem: str) -> str:
     return os.path.abspath(dest_path)
 
 
-def _analyze_speech_ai(audio_file_path: str, question_text: str) -> dict:
-    """AI 서버의 POST /speech-analyze를 호출해 스피치 분석 결과를 받아온다."""
+async def _analyze_speech_ai(audio_file_path: str, question_text: str) -> dict:
+    """AI 서버의 POST /speech-analyze를 AsyncClient 로 호출해 스피치 분석 결과를 받아옴."""
     try:
-        with httpx.Client(timeout=_SPEECH_AI_TIMEOUT) as client:
-            response = client.post(
+        async with httpx.AsyncClient(timeout=_SPEECH_AI_TIMEOUT) as client:
+            response = await client.post(
                 f"{settings.AI_SERVER_URL}/speech-analyze",
                 json={
                     # AI 서버(api/main.py) 의 SpeechAnalyzeRequest 가 필수로 받는 필드명.
@@ -478,27 +520,31 @@ def _analyze_speech_ai(audio_file_path: str, question_text: str) -> dict:
         raise AIServerError()
 
 
-def analyze_speech(
-    db: Session,
-    user_id: uuid.UUID,
-    question_id: uuid.UUID,
-    upload: UploadFile,
-    input_type: InputTypeEnum,
-) -> tuple[Submission, dict]:
-    """음성 파일을 공유 볼륨에 저장 → AI 스피치 분석 호출 → 제출/분석 결과를 영속화."""
+def _read_analyze_inputs(
+    db: Session, user_id: uuid.UUID, question_id: uuid.UUID
+) -> tuple[uuid.UUID, str]:
+    """analyze 의 동기 DB 읽기 단계.
+
+    소유권 검증 후 commit 으로 트랜잭션을 끝내 커넥션을 풀에 반환함.
+    """
     question = _get_owned_question(db, user_id, question_id)
+    # commit 후 ORM 객체가 만료되므로 필요한 값만 primitive 로 뽑아둠.
+    owned_question_id = question.question_id
+    question_text = question.question
+    db.commit()  # 읽기 트랜잭션 종료 → 커넥션 반환 (AI await 동안 미점유)
+    return owned_question_id, question_text
 
-    audio_path = _save_audio_file(upload, uuid.uuid4().hex)
-    try:
-        result = _analyze_speech_ai(audio_path, question.question)
-    except AIServerError:
-        # AI 호출이 실패하면 방금 저장한 음성 파일을 정리한다 (재시도 시 새로 업로드).
-        if os.path.exists(audio_path):
-            os.remove(audio_path)
-        raise
 
+def _save_analysis(
+    db: Session,
+    question_id: uuid.UUID,
+    input_type: InputTypeEnum,
+    audio_path: str,
+    result: dict,
+) -> Submission:
+    """analyze 의 동기 DB 쓰기 단계. 제출과 분석 결과를 한 트랜잭션으로 저장함."""
     submission = Submission(
-        question_id=question.question_id,
+        question_id=question_id,
         input_type=input_type,
         file_url=audio_path,
     )
@@ -550,4 +596,36 @@ def analyze_speech(
     db.commit()
     db.refresh(submission)
 
+    return submission
+
+
+async def analyze_speech(
+    db: Session,
+    user_id: uuid.UUID,
+    question_id: uuid.UUID,
+    upload: UploadFile,
+    input_type: InputTypeEnum,
+) -> tuple[Submission, dict]:
+    """음성 파일을 공유 볼륨에 저장 → AI 스피치 분석 호출 → 제출/분석 결과를 영속화.
+
+    (동기 읽기 → 커넥션 반환) → (파일 저장·AI await, 커넥션 미점유) → (동기 쓰기) 순서로 처리함.
+    DB 단계는 스레드에서 실행해 커넥션 풀 대기가 이벤트 루프를 막지 않도록 함.
+    """
+    question_id, question_text = await asyncio.to_thread(
+        _read_analyze_inputs, db, user_id, question_id
+    )
+
+    # 최대 100MB 디스크 쓰기라 이벤트 루프를 막지 않도록 스레드에서 실행함.
+    audio_path = await asyncio.to_thread(_save_audio_file, upload, uuid.uuid4().hex)
+    try:
+        result = await _analyze_speech_ai(audio_path, question_text)
+    except AIServerError:
+        # AI 호출이 실패하면 방금 저장한 음성 파일을 정리한다 (재시도 시 새로 업로드).
+        if os.path.exists(audio_path):
+            os.remove(audio_path)
+        raise
+
+    submission = await asyncio.to_thread(
+        _save_analysis, db, question_id, input_type, audio_path, result
+    )
     return submission, result

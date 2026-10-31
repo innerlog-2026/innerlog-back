@@ -1,0 +1,98 @@
+{
+  "label": "async_rerun",
+  "path": "/speech-practices/{application_id}/questions",
+  "duration_s": 20.0,
+  "levels": [
+    {
+      "concurrency": 5,
+      "duration_s": 21.32,
+      "total_requests": 50,
+      "ok": 50,
+      "fail": 0,
+      "rps": 2.35,
+      "p50_ms": 2117.1,
+      "p95_ms": 2195.0,
+      "p99_ms": 2196.8,
+      "max_ms": 2197.4,
+      "errors": {}
+    },
+    {
+      "concurrency": 10,
+      "duration_s": 21.37,
+      "total_requests": 100,
+      "ok": 100,
+      "fail": 0,
+      "rps": 4.68,
+      "p50_ms": 2115.0,
+      "p95_ms": 2189.2,
+      "p99_ms": 2191.5,
+      "max_ms": 2192.9,
+      "errors": {}
+    },
+    {
+      "concurrency": 15,
+      "duration_s": 21.43,
+      "total_requests": 150,
+      "ok": 150,
+      "fail": 0,
+      "rps": 7.0,
+      "p50_ms": 2107.2,
+      "p95_ms": 2288.3,
+      "p99_ms": 2297.9,
+      "max_ms": 2298.3,
+      "errors": {}
+    },
+    {
+      "concurrency": 20,
+      "duration_s": 22.1,
+      "total_requests": 196,
+      "ok": 196,
+      "fail": 0,
+      "rps": 8.87,
+      "p50_ms": 2158.6,
+      "p95_ms": 2375.2,
+      "p99_ms": 2487.5,
+      "max_ms": 2536.2,
+      "errors": {}
+    },
+    {
+      "concurrency": 30,
+      "duration_s": 22.04,
+      "total_requests": 278,
+      "ok": 278,
+      "fail": 0,
+      "rps": 12.61,
+      "p50_ms": 2178.2,
+      "p95_ms": 2616.8,
+      "p99_ms": 2630.2,
+      "max_ms": 2632.8,
+      "errors": {}
+    },
+    {
+      "concurrency": 50,
+      "duration_s": 23.12,
+      "total_requests": 323,
+      "ok": 323,
+      "fail": 0,
+      "rps": 13.97,
+      "p50_ms": 2975.7,
+      "p95_ms": 5018.3,
+      "p99_ms": 5596.3,
+      "max_ms": 6682.6,
+      "errors": {}
+    },
+    {
+      "concurrency": 100,
+      "duration_s": 22.2,
+      "total_requests": 816,
+      "ok": 816,
+      "fail": 0,
+      "rps": 36.75,
+      "p50_ms": 2322.6,
+      "p95_ms": 4344.5,
+      "p99_ms": 4443.4,
+      "max_ms": 4469.5,
+      "errors": {}
+    }
+  ]
+}

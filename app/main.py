@@ -7,7 +7,7 @@ from app.core.exceptions import InnerLogException
 app = FastAPI(
     title="InnerLog API",
     description="이너로그(InnerLog) API 문서",
-    version="1.8.0"
+    version="1.9.0"
 )
 
 app.add_middleware(
