@@ -62,6 +62,10 @@ class Application(Base):
 
 class Question(Base):
     __tablename__ = "question"
+    __table_args__ = (
+        # 한 지원 안에서 질문 순서를 유일하게 해 동시 생성 요청의 중복 저장을 막음.
+        UniqueConstraint("application_id", "sequence", name="uq_question_application_sequence"),
+    )
 
     question_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     application_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("application.application_id"), nullable=False)
@@ -75,6 +79,12 @@ class Question(Base):
 
 class PersonalStatement(Base):
     __tablename__ = "personal_statement"
+    __table_args__ = (
+        # 한 지원 안에서 자소서 순서를 유일하게 해 동시 생성 요청의 중복 저장을 막음.
+        UniqueConstraint(
+            "application_id", "sequence", name="uq_personal_statement_application_sequence"
+        ),
+    )
 
     personal_statement_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     application_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("application.application_id"), nullable=False)
