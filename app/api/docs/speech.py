@@ -7,6 +7,7 @@ from app.core.exceptions import (
     AudioFileTooLargeError,
     InvalidAudioFileError,
     InvalidTokenError,
+    QuestionGenerationConflictError,
     QuestionNotFoundError,
     ResumeTooShortError,
     SpeechPracticeAlreadyExistsError,
@@ -29,6 +30,9 @@ _speech_already_exists_response = error_response(
     "이미 스피치 연습이 생성됨", SpeechPracticeAlreadyExistsError
 )
 _question_not_found_response = error_response("질문 없음", QuestionNotFoundError)
+_question_generation_conflict_response = error_response(
+    "동시에 들어온 추가 생성 요청이 먼저 저장됨", QuestionGenerationConflictError
+)
 _resume_too_short_response = error_response("자기소개서 길이 부족", ResumeTooShortError)
 _invalid_audio_response = error_response("잘못된 음성 파일 형식", InvalidAudioFileError)
 _audio_too_large_response = error_response("음성 파일 용량 초과", AudioFileTooLargeError)
@@ -55,6 +59,7 @@ generate_speech_practice_questions_docs = dict(
         401: _unauthorized_response,
         403: _speech_not_allowed_response,
         404: _application_not_found_response,
+        409: _question_generation_conflict_response,
         502: _ai_server_error_response,
         503: _ai_server_unreachable_response,
         504: _ai_server_timeout_response,

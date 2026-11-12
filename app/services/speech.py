@@ -6,9 +6,11 @@ import uuid
 import httpx
 from fastapi import UploadFile
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.database import violated_constraint
 from app.core.exceptions import (
     AIServerError,
     AIServerTimeoutError,
@@ -16,6 +18,7 @@ from app.core.exceptions import (
     ApplicationNotFoundError,
     AudioFileTooLargeError,
     InvalidAudioFileError,
+    QuestionGenerationConflictError,
     QuestionNotFoundError,
     SpeechPracticeAlreadyExistsError,
     ResumeTooShortError,
@@ -70,6 +73,11 @@ _SPEECH_AI_TIMEOUT = httpx.Timeout(connect=5.0, read=180.0, write=30.0, pool=5.0
 _MIN_RESUME_LENGTH = 50
 _ALLOWED_AUDIO_EXTENSIONS = {".mp3", ".wav"}
 _MAX_AUDIO_BYTES = 100 * 1024 * 1024  # 100MB
+# 최초 생성 저장에서 409 로 바꿀 자소서·질문 순서 유니크 제약을 모아 둠.
+_SEQUENCE_CONSTRAINTS = {
+    "uq_personal_statement_application_sequence",
+    "uq_question_application_sequence",
+}
 
 
 def _extract_questions(company: str, role: str, resume_text: str) -> list[dict]:
@@ -210,7 +218,10 @@ def _read_create_inputs(
 def _save_created_practice(
     db: Session, app_id: uuid.UUID, body: SpeechPracticeCreateReq, extracted: list[dict]
 ) -> list[Question]:
-    """create 의 동기 DB 쓰기 단계. 자소서와 질문을 한 트랜잭션으로 저장함."""
+    """create 의 동기 DB 쓰기 단계. 자소서와 질문을 한 트랜잭션으로 저장함.
+
+    읽기 단계의 생성 여부 확인 이후 동시 요청이 먼저 저장한 경우, 순서 유니크 제약 위반을 409 로 변환함.
+    """
     for sequence, item in enumerate(body.personal_statements, start=1):
         db.add(
             PersonalStatement(
@@ -232,7 +243,13 @@ def _save_created_practice(
     ]
     db.add_all(questions)
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        if violated_constraint(exc) in _SEQUENCE_CONSTRAINTS:
+            raise SpeechPracticeAlreadyExistsError()
+        raise
     for question in questions:
         db.refresh(question)
 
@@ -389,7 +406,10 @@ def _save_new_questions(
     existing_texts: set[str],
     max_sequence: int,
 ) -> list[Question]:
-    """generate 의 동기 DB 쓰기 단계. 기존 질문과 텍스트가 겹치지 않는 항목만 저장함."""
+    """generate 의 동기 DB 쓰기 단계. 기존 질문과 텍스트가 겹치지 않는 항목만 저장함.
+
+    같은 max_sequence 를 읽은 동시 요청이 먼저 저장한 경우, 순서 유니크 제약 위반을 409 로 변환함.
+    """
     new_questions: list[Question] = []
     seen = set(existing_texts)
     sequence = max_sequence
@@ -410,7 +430,13 @@ def _save_new_questions(
 
     if new_questions:
         db.add_all(new_questions)
-        db.commit()
+        try:
+            db.commit()
+        except IntegrityError as exc:
+            db.rollback()
+            if violated_constraint(exc) == "uq_question_application_sequence":
+                raise QuestionGenerationConflictError()
+            raise
         for question in new_questions:
             db.refresh(question)
 
