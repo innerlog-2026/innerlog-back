@@ -61,6 +61,15 @@ class SpeechPracticeAlreadyExistsError(InnerLogException):
         super().__init__(409, "SPEECH_409", "이미 스피치 연습이 생성된 지원 현황입니다.")
 
 
+class QuestionGenerationConflictError(InnerLogException):
+    def __init__(self):
+        super().__init__(
+            409,
+            "SPEECH_QUESTION_409",
+            "다른 요청에서 예상 질문이 먼저 추가되었습니다. 질문 목록을 다시 조회해주세요.",
+        )
+
+
 class ResumeTooShortError(InnerLogException):
     def __init__(self):
         super().__init__(

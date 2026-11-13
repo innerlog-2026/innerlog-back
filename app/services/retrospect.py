@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.database import violated_constraint
 from app.core.exceptions import (
     AIServerError,
     AIServerTimeoutError,
@@ -99,12 +100,6 @@ def _get_owned_session(
     if not session:
         raise SessionNotFoundError()
     return session
-
-
-def _violated_constraint(exc: IntegrityError) -> Optional[str]:
-    """IntegrityError 에서 위반된 제약조건 이름을 꺼냄."""
-    diag = getattr(exc.orig, "diag", None)
-    return getattr(diag, "constraint_name", None)
 
 
 def _next_sequence(db: Session, session_id: uuid.UUID) -> int:
@@ -237,7 +232,7 @@ def start_retrospect(
     except IntegrityError as exc:
         # 위 존재 확인 이후 동시 요청이 같은 type 세션을 먼저 저장한 경우를 409 로 변환함.
         db.rollback()
-        if _violated_constraint(exc) == "uq_session_application_type":
+        if violated_constraint(exc) == "uq_session_application_type":
             raise RetrospectAlreadyExistsError()
         raise
 
@@ -345,7 +340,7 @@ def summarize_retrospect(
     except IntegrityError as exc:
         # 위 존재 확인 이후 동시 요청이 분석을 먼저 저장한 경우 저장된 결과를 반환함 (멱등).
         db.rollback()
-        if _violated_constraint(exc) != "uq_interview_analysis_session":
+        if violated_constraint(exc) != "uq_interview_analysis_session":
             raise
         session = _get_owned_session(db, user_id, session_id)
         existing = (
